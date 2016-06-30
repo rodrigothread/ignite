@@ -17,6 +17,8 @@
 
 package org.apache.ignite.internal.processors.query.h2.opt;
 
+import org.apache.ignite.internal.util.tostring.GridToStringInclude;
+import org.apache.ignite.internal.util.typedef.internal.S;
 import org.h2.result.RowFactory;
 import org.h2.value.Value;
 
@@ -144,6 +146,7 @@ public class GridH2RowFactory extends RowFactory {
      */
     private static final class RowSimple extends GridH2Row {
         /** */
+        @GridToStringInclude
         private Value[] vals;
 
         /**
@@ -166,6 +169,11 @@ public class GridH2RowFactory extends RowFactory {
         /** {@inheritDoc} */
         @Override public void setValue(int idx, Value v) {
             vals[idx] = v;
+        }
+
+        /** {@inheritDoc} */
+        @Override public String toString() {
+            return S.toString(RowSimple.class, this);
         }
     }
 }

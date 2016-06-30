@@ -115,7 +115,7 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
     private final boolean snapshotEnabled;
 
     /** */
-    private final CIX2<ClusterNode,Message> locNodeHandler = new CIX2<ClusterNode,Message>() {
+    private final CIX2<ClusterNode,Message> locNodeHnd = new CIX2<ClusterNode,Message>() {
         @Override public void applyx(ClusterNode clusterNode, Message msg) throws IgniteCheckedException {
             onMessage0(clusterNode.id(), msg);
         }
@@ -238,7 +238,7 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
      * @param msg Message.
      */
     private void send(Collection<ClusterNode> nodes, Message msg) {
-        if (!getTable().rowDescriptor().indexing().send(msgTopic, nodes, msg, null, locNodeHandler,
+        if (!getTable().rowDescriptor().indexing().send(msgTopic, nodes, msg, null, locNodeHnd,
             GridIoPolicy.IDX_POOL, false))
             throw new GridH2RetryException("Failed to send message to nodes: " + nodes + ".");
     }
@@ -296,7 +296,7 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
 
                 if (msg.bounds() != null) {
                     // This is the first request containing all the search rows.
-                    ConcurrentNavigableMap<GridSearchRowPointer,GridH2Row> snapshot0 = qctx.getSnapshot(idxId);
+                    ConcurrentNavigableMap<GridSearchRowPointer, GridH2Row> snapshot0 = qctx.getSnapshot(idxId);
 
                     assert !msg.bounds().isEmpty() : "empty bounds";
 
@@ -785,7 +785,7 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
      * @return Collection of nodes for broadcasting.
      */
     private List<ClusterNode> broadcastNodes(GridH2QueryContext qctx, GridCacheContext<?,?> cctx) {
-        Map<UUID,int[]> partMap = qctx.partitionsMap();
+        Map<UUID, int[]> partMap = qctx.partitionsMap();
 
         List<ClusterNode> res;
 
@@ -1140,7 +1140,7 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
         final GridCacheContext<?,?> cctx;
 
         /** */
-        final boolean unicast;
+        final boolean ucast;
 
         /** */
         final int affColId;
@@ -1168,12 +1168,12 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
 
         /**
          * @param cctx Cache Cache context.
-         * @param unicast Unicast or broadcast query.
+         * @param ucast Unicast or broadcast query.
          * @param affColId Affinity column ID.
          */
-        private DistributedLookupBatch(GridCacheContext<?,?> cctx, boolean unicast, int affColId) {
+        private DistributedLookupBatch(GridCacheContext<?,?> cctx, boolean ucast, int affColId) {
             this.cctx = cctx;
-            this.unicast = unicast;
+            this.ucast = ucast;
             this.affColId = affColId;
         }
 
@@ -1212,7 +1212,7 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
 
             try {
                 pkAffKeyFirst = ctx.affinity().affinityKey(cctx.name(), pkFirst.getObject());
-                pkAffKeyLast = ctx.affinity().affinityKey(cctx.name(), pkFirst.getObject());
+                pkAffKeyLast = ctx.affinity().affinityKey(cctx.name(), pkLast.getObject());
             }
             catch (IgniteCheckedException e) {
                 throw new CacheException(e);
@@ -1228,6 +1228,7 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
         }
 
         /** {@inheritDoc} */
+        @SuppressWarnings("ForLoopReplaceableByForEach")
         @Override public boolean addSearchRows(SearchRow firstRow, SearchRow lastRow) {
             if (findCalled) {
                 findCalled = false;
@@ -1313,6 +1314,9 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
             return batchFull;
         }
 
+        /**
+         *
+         */
         private void startStreams() {
             if (rangeStreams.isEmpty()) {
                 assert res.isEmpty();
@@ -1338,8 +1342,8 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
         }
 
         /** {@inheritDoc} */
-        @Override public void reset(boolean beforeQuery) {
-            if (beforeQuery) {
+        @Override public void reset(boolean beforeQry) {
+            if (beforeQry) {
                 qctx = GridH2QueryContext.get();
                 batchLookupId = qctx.nextBatchLookupId();
                 rangeStreams = new HashMap<>();
@@ -1355,7 +1359,7 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
 
         /** {@inheritDoc} */
         @Override public String getPlanSQL() {
-            return unicast ? "unicast" : "broadcast";
+            return ucast ? "unicast" : "broadcast";
         }
     }
 

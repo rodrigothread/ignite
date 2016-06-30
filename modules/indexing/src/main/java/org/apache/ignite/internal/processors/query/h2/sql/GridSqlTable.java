@@ -37,7 +37,7 @@ public class GridSqlTable extends GridSqlElement {
     private final GridH2Table tbl;
 
     /** */
-    private boolean affKeyCondition;
+    private boolean affKeyCond;
 
     /**
      * @param schema Schema.
@@ -72,17 +72,17 @@ public class GridSqlTable extends GridSqlElement {
     }
 
     /**
-     * @param affKeyCondition If affinity key condition is found.
+     * @param affKeyCond If affinity key condition is found.
      */
-    public void affinityKeyCondition(boolean affKeyCondition) {
-        this.affKeyCondition = affKeyCondition;
+    public void affinityKeyCondition(boolean affKeyCond) {
+        this.affKeyCond = affKeyCond;
     }
 
     /**
      * @return {@code true} If affinity key condition is found.
      */
     public boolean affinityKeyCondition() {
-        return affKeyCondition;
+        return affKeyCond;
     }
 
     /** {@inheritDoc} */
