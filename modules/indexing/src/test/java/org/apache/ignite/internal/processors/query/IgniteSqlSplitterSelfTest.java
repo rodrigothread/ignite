@@ -475,9 +475,11 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
      * Test value.
      */
     private static class GroupIndexTestValue implements Serializable {
+        /** */
         @QuerySqlField(orderedGroups = @QuerySqlField.Group(name = "grpIdx", order = 0))
         private int a;
 
+        /** */
         @QuerySqlField(orderedGroups = @QuerySqlField.Group(name = "grpIdx", order = 1))
         private int b;
 
@@ -491,36 +493,59 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
         }
     }
 
+    /**
+     *
+     */
     private static class Person2 implements Serializable {
+        /** */
         @QuerySqlField
         int orgId;
 
+        /** */
         @QuerySqlField
         String name;
     }
 
+    /**
+     *
+     */
     private static class Organization implements Serializable {
+        /** */
         @QuerySqlField
         String name;
     }
 
+    /**
+     *
+     */
     private static class User implements Serializable {
+        /** */
         @QuerySqlField
         private int id;
     }
 
+    /**
+     *
+     */
     private static class UserOrder implements Serializable {
+        /** */
         @QuerySqlField
         private int id;
 
+        /** */
         @QuerySqlField
         private int userId;
     }
 
+    /**
+     *
+     */
     private static class OrderGood implements Serializable {
+        /** */
         @QuerySqlField
         private int orderId;
 
+        /** */
         @QuerySqlField
         private int goodId;
     }

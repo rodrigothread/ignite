@@ -107,6 +107,7 @@ public class GridH2Boolean extends GridH2ValueMessage {
         return -5;
     }
 
+    /** {@inheritDoc} */
     @Override public byte fieldsCount() {
         return 1;
     }

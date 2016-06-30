@@ -1096,12 +1096,12 @@ public class IgniteH2Indexing implements GridQueryIndexing {
 
         final boolean enforceJoinOrder = qry.isEnforceJoinOrder();
         final boolean distributedJoins = qry.isDistributedJoins() && isPartitioned(cctx);
-        final boolean groupByCollocated = qry.isCollocated();
+        final boolean grpByCollocated = qry.isCollocated();
 
         GridCacheTwoStepQuery twoStepQry;
         List<GridQueryFieldMetadata> meta;
 
-        final TwoStepCachedQueryKey cachedQryKey = new TwoStepCachedQueryKey(space, sqlQry, groupByCollocated,
+        final TwoStepCachedQueryKey cachedQryKey = new TwoStepCachedQueryKey(space, sqlQry, grpByCollocated,
             distributedJoins, enforceJoinOrder);
         TwoStepCachedQuery cachedQry = twoStepCache.get(cachedQryKey);
 
@@ -1152,7 +1152,7 @@ public class IgniteH2Indexing implements GridQueryIndexing {
             try {
                 bindParameters(stmt, F.asList(qry.getArgs()));
 
-                twoStepQry = GridSqlQuerySplitter.split((JdbcPreparedStatement)stmt, qry.getArgs(), groupByCollocated,
+                twoStepQry = GridSqlQuerySplitter.split((JdbcPreparedStatement)stmt, qry.getArgs(), grpByCollocated,
                     distributedJoins);
 
                 // Setup spaces from schemas.
@@ -1961,7 +1961,7 @@ public class IgniteH2Indexing implements GridQueryIndexing {
         private final String sql;
 
         /** */
-        private final boolean groupByCollocated;
+        private final boolean grpByCollocated;
 
         /** */
         private final boolean distributedJoins;
@@ -1972,15 +1972,18 @@ public class IgniteH2Indexing implements GridQueryIndexing {
         /**
          * @param space Space.
          * @param sql Sql.
-         * @param groupByCollocated Collocated GROUP BY.
+         * @param grpByCollocated Collocated GROUP BY.
          * @param distributedJoins Distributed joins enabled.
          * @param enforceJoinOrder Enforce join order of tables.
          */
-        private TwoStepCachedQueryKey(String space, String sql, boolean groupByCollocated, boolean distributedJoins,
+        private TwoStepCachedQueryKey(String space,
+            String sql,
+            boolean grpByCollocated,
+            boolean distributedJoins,
             boolean enforceJoinOrder) {
             this.space = space;
             this.sql = sql;
-            this.groupByCollocated = groupByCollocated;
+            this.grpByCollocated = grpByCollocated;
             this.distributedJoins = distributedJoins;
             this.enforceJoinOrder = enforceJoinOrder;
         }
@@ -1995,7 +1998,7 @@ public class IgniteH2Indexing implements GridQueryIndexing {
 
             TwoStepCachedQueryKey that = (TwoStepCachedQueryKey)o;
 
-            if (groupByCollocated != that.groupByCollocated)
+            if (grpByCollocated != that.grpByCollocated)
                 return false;
 
             if (distributedJoins != that.distributedJoins)
@@ -2012,13 +2015,13 @@ public class IgniteH2Indexing implements GridQueryIndexing {
 
         /** {@inheritDoc} */
         @Override public int hashCode() {
-            int result = space != null ? space.hashCode() : 0;
-            result = 31 * result + sql.hashCode();
-            result = 31 * result + (groupByCollocated ? 1 : 0);
-            result = 31 * result + (distributedJoins ? 1 : 0);
-            result = 31 * result + (enforceJoinOrder ? 1 : 0);
+            int res = space != null ? space.hashCode() : 0;
+            res = 31 * res + sql.hashCode();
+            res = 31 * res + (grpByCollocated ? 1 : 0);
+            res = 31 * res + (distributedJoins ? 1 : 0);
+            res = 31 * res + (enforceJoinOrder ? 1 : 0);
 
-            return result;
+            return res;
         }
     }
 

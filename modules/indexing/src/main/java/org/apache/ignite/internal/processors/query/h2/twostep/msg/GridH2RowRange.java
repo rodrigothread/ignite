@@ -20,6 +20,8 @@ package org.apache.ignite.internal.processors.query.h2.twostep.msg;
 import java.nio.ByteBuffer;
 import java.util.List;
 import org.apache.ignite.internal.GridDirectCollection;
+import org.apache.ignite.internal.util.tostring.GridToStringInclude;
+import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.plugin.extensions.communication.Message;
 import org.apache.ignite.plugin.extensions.communication.MessageCollectionItemType;
 import org.apache.ignite.plugin.extensions.communication.MessageReader;
@@ -37,6 +39,7 @@ public class GridH2RowRange implements Message {
 
     /** */
     @GridDirectCollection(Message.class)
+    @GridToStringInclude
     private List<GridH2RowMessage> rows;
 
     /** */
@@ -169,5 +172,10 @@ public class GridH2RowRange implements Message {
     /** {@inheritDoc} */
     @Override public void onAckReceived() {
         // No-op.
+    }
+
+    /** {@inheritDoc} */
+    @Override public String toString() {
+        return S.toString(GridH2RowRange.class, this);
     }
 }

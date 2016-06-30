@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.cache.Cache;
 import javax.cache.CacheException;
@@ -1167,6 +1168,21 @@ public abstract class GridCommonAbstractTest extends GridAbstractTest {
             catch (TransactionRollbackException ignore) {
                 // Safe to retry right away.
             }
+        }
+    }
+
+    /**
+     * @param aff Affinity.
+     * @param key Counter.
+     * @param node Target node.
+     * @return Key.
+     */
+    protected final Integer keyForNode(Affinity<Object> aff, AtomicInteger key, ClusterNode node) {
+        while (true) {
+            Integer next = key.getAndIncrement();
+
+            if (aff.mapKeyToNode(next).equals(node))
+                return next;
         }
     }
 }

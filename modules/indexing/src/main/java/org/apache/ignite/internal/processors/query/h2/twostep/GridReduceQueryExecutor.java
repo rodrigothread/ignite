@@ -480,7 +480,7 @@ public class GridReduceQueryExecutor {
         if (!F.isEmpty(m)) {
             for (Map.Entry<IgniteProductVersion,Collection<ClusterNode>> entry : m.entrySet()) {
                 if (entry.getKey().compareTo(DISTRIBUTED_JOIN_SINCE) >= 0)
-                        break;
+                    break;
 
                 for (ClusterNode node : entry.getValue()) {
                     if (!node.isClient() && !node.isDaemon())
@@ -533,7 +533,7 @@ public class GridReduceQueryExecutor {
             Collection<ClusterNode> nodes;
 
             // Explicit partition mapping for unstable topology.
-            Map<ClusterNode,IntArray> partsMap = null;
+            Map<ClusterNode, IntArray> partsMap = null;
 
             if (isPreloadingActive(cctx, extraSpaces)) {
                 if (cctx.isReplicated())
@@ -1192,7 +1192,7 @@ public class GridReduceQueryExecutor {
      * @param m Map.
      * @return Converted map.
      */
-    private static Map<UUID,int[]> convert(Map<ClusterNode,IntArray> m) {
+    private static Map<UUID,int[]> convert(Map<ClusterNode, IntArray> m) {
         if (m == null)
             return null;
 
@@ -1209,7 +1209,7 @@ public class GridReduceQueryExecutor {
      * @param qry Query.
      * @param explain Explain.
      * @return Table.
-     * @throws IgniteCheckedException
+     * @throws IgniteCheckedException If failed.
      */
     private GridMergeTable createMergeTable(JdbcConnection conn, GridCacheSqlQuery qry, boolean explain)
         throws IgniteCheckedException {
