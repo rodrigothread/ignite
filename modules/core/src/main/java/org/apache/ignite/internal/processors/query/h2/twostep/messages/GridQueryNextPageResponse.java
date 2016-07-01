@@ -304,6 +304,8 @@ public class GridQueryNextPageResponse implements Message {
 
     /** {@inheritDoc} */
     @Override public String toString() {
-        return S.toString(GridQueryNextPageResponse.class, this);
+        return S.toString(GridQueryNextPageResponse.class, this,
+            "valsSize", vals != null ? vals.size() : 0,
+            "rowsSize", plainRows != null ? plainRows.size() : 0);
     }
 }

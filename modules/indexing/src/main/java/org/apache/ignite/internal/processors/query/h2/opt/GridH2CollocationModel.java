@@ -98,7 +98,13 @@ public final class GridH2CollocationModel {
 
         if (unions != null) {
             // Bind created child to unions.
-            assert upper == null || upper.child(filter, false) != null;
+            assert upper == null || upper.child(filter, false) != null || unions.isEmpty();
+
+            if (upper != null && unions.isEmpty()) {
+                assert upper.child(filter, false) == null;
+
+                upper.children[filter] = child;
+            }
 
             unions.add(child);
 
@@ -572,7 +578,11 @@ public final class GridH2CollocationModel {
      * @return {@code true} If the query is collocated.
      */
     public static boolean isCollocated(Query qry) {
-        return buildCollocationModel(null, -1, qry, null).type(true).isCollocated();
+        GridH2CollocationModel mdl = buildCollocationModel(null, -1, qry, null);
+
+        Type type = mdl.type(true);
+
+        return type.isCollocated();
     }
 
     /**

@@ -1924,6 +1924,10 @@ public class IgniteH2Indexing implements GridQueryIndexing {
             @Override public boolean isValueRequired() {
                 return false;
             }
+
+            @Override public String toString() {
+                return "IndexingQueryFilter [ver=" + topVer + ']';
+            }
         };
     }
 

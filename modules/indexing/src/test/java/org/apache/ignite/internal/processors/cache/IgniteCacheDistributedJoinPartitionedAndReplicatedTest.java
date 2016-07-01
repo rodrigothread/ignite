@@ -45,7 +45,7 @@ import static org.apache.ignite.cache.CacheWriteSynchronizationMode.FULL_SYNC;
 /**
  *
  */
-public class IgniteCacheJoinPartitionedAndReplicatedTest extends GridCommonAbstractTest {
+public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends GridCommonAbstractTest {
     /** */
     private static final TcpDiscoveryIpFinder IP_FINDER = new TcpDiscoveryVmIpFinder(true);
 
@@ -143,7 +143,7 @@ public class IgniteCacheJoinPartitionedAndReplicatedTest extends GridCommonAbstr
     @Override protected void beforeTestsStarted() throws Exception {
         super.beforeTestsStarted();
 
-        startGrids(2);
+        startGridsMultiThreaded(2);
 
         client = true;
 
@@ -177,7 +177,7 @@ public class IgniteCacheJoinPartitionedAndReplicatedTest extends GridCommonAbstr
         ClusterNode node1 = ignite(1).cluster().localNode();
 
         /**
-         * One organization, two persons, two accounts.
+         * One organization, one person, two accounts.
          */
 
         int orgId1 = keyForNode(aff, orgKey, node0);
@@ -187,8 +187,8 @@ public class IgniteCacheJoinPartitionedAndReplicatedTest extends GridCommonAbstr
         int pid = keyForNode(aff, pKey, node0);
         personCache.put(pid, new Person(orgId1, "o1-p1"));
 
-        accCache.put(keyForNode(aff, accKey, node0), new Account(pid, orgId1));
-        accCache.put(keyForNode(aff, accKey, node1), new Account(pid, orgId1));
+        accCache.put(keyForNode(aff, accKey, node0), new Account(pid, orgId1, "a0"));
+        accCache.put(keyForNode(aff, accKey, node1), new Account(pid, orgId1, "a1"));
 
         checkQuery("select o.name, p._key, p.name, a.name " +
             "from \"org\".Organization o, \"person\".Person p, \"acc\".Account a " +
@@ -254,11 +254,12 @@ public class IgniteCacheJoinPartitionedAndReplicatedTest extends GridCommonAbstr
         /**
          * @param personId Person ID.
          * @param orgId Organization ID.
+         * @param name Name.
          */
-        public Account(int personId, int orgId) {
+        public Account(int personId, int orgId, String name) {
             this.personId = personId;
             this.orgId = orgId;
-            name = "acc-" + personId;
+            this.name = name;
         }
 
         /** {@inheritDoc} */

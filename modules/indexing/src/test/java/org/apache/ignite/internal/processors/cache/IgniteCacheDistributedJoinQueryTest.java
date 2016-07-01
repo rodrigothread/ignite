@@ -77,7 +77,7 @@ public class IgniteCacheDistributedJoinQueryTest extends GridCommonAbstractTest 
     @Override protected void beforeTestsStarted() throws Exception {
         super.beforeTestsStarted();
 
-        startGrids(2);
+        startGridsMultiThreaded(2);
 
         client = true;
 
@@ -111,6 +111,10 @@ public class IgniteCacheDistributedJoinQueryTest extends GridCommonAbstractTest 
             checkQuery("select o._key, o.name, p._key, p.name " +
                 "from \"org\".Organization o, Person p " +
                 "where p.orgId = o._key", pCache, total);
+
+            checkQuery("select * from (select o._key, o.name, p._key pKey, p.name pName " +
+                "from \"org\".Organization o, Person p " +
+                "where p.orgId = o._key)", pCache, total);
 
             checkQuery("select o._key, o.name, p._key, p.name " +
                 "from \"org\".Organization o, Person p " +

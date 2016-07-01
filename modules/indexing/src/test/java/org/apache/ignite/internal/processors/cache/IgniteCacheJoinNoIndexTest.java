@@ -121,7 +121,7 @@ public class IgniteCacheJoinNoIndexTest extends GridCommonAbstractTest {
     @Override protected void beforeTestsStarted() throws Exception {
         super.beforeTestsStarted();
 
-        startGrids(2);
+        startGridsMultiThreaded(2);
 
         client = true;
 

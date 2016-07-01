@@ -176,6 +176,6 @@ public class GridH2RowRange implements Message {
 
     /** {@inheritDoc} */
     @Override public String toString() {
-        return S.toString(GridH2RowRange.class, this);
+        return S.toString(GridH2RowRange.class, this, "rowsSize", rows != null ? rows.size() : 0);
     }
 }

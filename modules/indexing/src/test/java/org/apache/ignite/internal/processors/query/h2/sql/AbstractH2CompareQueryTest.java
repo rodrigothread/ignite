@@ -154,6 +154,7 @@ public abstract class AbstractH2CompareQueryTest extends GridCommonAbstractTest 
 
     /**
      * Populate cache and h2 database with test data.
+     * @throws SQLException If failed.
      */
     protected abstract void initCacheAndDbData() throws SQLException;
 
@@ -166,6 +167,7 @@ public abstract class AbstractH2CompareQueryTest extends GridCommonAbstractTest 
      * Initialize h2 database schema.
      *
      * @throws SQLException If exception.
+     * @return Statement.
      */
     protected Statement initializeH2Schema() throws SQLException {
         Statement st = conn.createStatement();
@@ -262,19 +264,27 @@ public abstract class AbstractH2CompareQueryTest extends GridCommonAbstractTest 
      * @param distrib Distributed SQL Join flag.
      * @param args SQL arguments.
      * @param ordering Expected ordering of SQL results. If {@link Ordering#ORDERED}
-     * then results will compare as ordered queries.
+     *      then results will compare as ordered queries.
      * @return Result set after SQL query execution.
      * @throws SQLException If exception.
      */
     @SuppressWarnings("unchecked")
-    protected static List<List<?>> compareQueryRes0(IgniteCache cache, String sql, boolean distrib,
-        @Nullable Object[] args, Ordering ordering) throws SQLException {
+    protected static List<List<?>> compareQueryRes0(IgniteCache cache,
+        String sql,
+        boolean distrib,
+        @Nullable Object[] args,
+        Ordering ordering) throws SQLException {
         if (args == null)
             args = new Object[] {null};
 
-        X.printerrln("Sql query:\n" + sql + "\nargs=" + Arrays.toString(args));
-
         List<List<?>> h2Res = executeH2Query(sql, args);
+
+//        String plan = (String)((IgniteCache<Object, Object>)cache).query(new SqlFieldsQuery("explain " + sql)
+//            .setArgs(args)
+//            .setDistributedJoins(distrib))
+//            .getAll().get(0).get(0);
+//
+//        X.println("Plan : " + plan);
 
         List<List<?>> cacheRes = cache.query(new SqlFieldsQuery(sql).setArgs(args).setDistributedJoins(distrib)).getAll();
 
@@ -282,6 +292,7 @@ public abstract class AbstractH2CompareQueryTest extends GridCommonAbstractTest 
             assertRsEquals(h2Res, cacheRes, ordering);
         }
         catch (AssertionFailedError e) {
+            X.println("Sql query:\n" + sql + "\nargs=" + Arrays.toString(args));
             X.println("[h2Res=" + h2Res + ", cacheRes=" + cacheRes + "]");
 
             throw e;
@@ -302,7 +313,7 @@ public abstract class AbstractH2CompareQueryTest extends GridCommonAbstractTest 
         List<List<?>> res = new ArrayList<>();
         ResultSet rs = null;
 
-        try(PreparedStatement st = conn.prepareStatement(sql)) {
+        try (PreparedStatement st = conn.prepareStatement(sql)) {
             for (int idx = 0; idx < args.length; idx++)
                 st.setObject(idx + 1, args[idx]);
 
@@ -312,10 +323,10 @@ public abstract class AbstractH2CompareQueryTest extends GridCommonAbstractTest 
 
             int colCnt = meta.getColumnCount();
 
-            for (int i = 1; i <= colCnt; i++)
-                X.print(meta.getColumnLabel(i) + "  ");
-
-            X.println();
+//            for (int i = 1; i <= colCnt; i++)
+//                X.print(meta.getColumnLabel(i) + "  ");
+//
+//            X.println();
 
             while (rs.next()) {
                 List<Object> row = new ArrayList<>(colCnt);
@@ -363,7 +374,7 @@ public abstract class AbstractH2CompareQueryTest extends GridCommonAbstractTest 
 
                 assertEquals("Unique rows count has to be equal.", rowsWithCnt1.size(), rowsWithCnt2.size());
 
-                X.println("Result size: " + rowsWithCnt1.size());
+                // X.println("Result size: " + rowsWithCnt1.size());
 
                 Iterator<Map.Entry<String,Integer>> iter1 = rowsWithCnt1.entrySet().iterator();
                 Iterator<Map.Entry<String,Integer>> iter2 = rowsWithCnt2.entrySet().iterator();
