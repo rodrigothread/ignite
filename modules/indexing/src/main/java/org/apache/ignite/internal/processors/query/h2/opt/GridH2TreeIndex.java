@@ -393,7 +393,7 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
             return tree;
 
         ConcurrentNavigableMap<GridSearchRowPointer, GridH2Row> res = threadLocalSnapshot();
-        
+
         if (res == null)
             res = tree;
 
@@ -732,7 +732,7 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
     @Override public IndexLookupBatch createLookupBatch(TableFilter filter) {
         GridH2QueryContext qctx = GridH2QueryContext.get();
 
-        if (qctx == null || !qctx.distributedJoins())
+        if (qctx == null || !qctx.distributedJoins() || !getTable().isPartitioned())
             return null;
 
         IndexColumn affCol = getTable().getAffinityKeyColumn();
