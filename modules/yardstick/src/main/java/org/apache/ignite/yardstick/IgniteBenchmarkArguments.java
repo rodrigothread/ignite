@@ -156,6 +156,10 @@ public class IgniteBenchmarkArguments {
     @Parameter(names = {"-ltops", "--allowedLoadTestOperations"}, variableArity = true, description = "List of enabled load test operations")
     private List<String> allowedLoadTestOps = new ArrayList<>();
 
+    /** */
+    @Parameter(names = {"-bcj", "--broadcastJoin"}, description = "Use broadcast distributed join")
+    private boolean broadcastJoin;
+
     /**
      * @return List of enabled load test operations.
      */
@@ -378,6 +382,13 @@ public class IgniteBenchmarkArguments {
      */
     public boolean keysPerThread() {
         return keysPerThread;
+    }
+
+    /**
+     * @return {@code True} if should use broadcast for distributed join.
+     */
+    public boolean broadcastJoin() {
+        return broadcastJoin;
     }
 
     /**
