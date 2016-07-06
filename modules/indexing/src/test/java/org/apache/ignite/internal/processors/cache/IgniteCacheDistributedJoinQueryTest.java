@@ -117,6 +117,14 @@ public class IgniteCacheDistributedJoinQueryTest extends GridCommonAbstractTest 
                 "where p.orgId = o._key)", pCache, total);
 
             checkQuery("select o._key, o.name, p._key, p.name " +
+                "from \"org\".Organization o inner join Person p " +
+                "on p.orgId = o._key", pCache, total);
+
+            checkQuery("select * from (select o._key o_key, o.name o_name, p._key p_key, p.name p_name " +
+                "from \"org\".Organization o inner join Person p " +
+                "on p.orgId = o._key)", pCache, total);
+
+            checkQuery("select o._key, o.name, p._key, p.name " +
                 "from \"org\".Organization o, Person p " +
                 "where p.orgId = o._key and o._key=" + orgIds.get(3), pCache, 3);
 
