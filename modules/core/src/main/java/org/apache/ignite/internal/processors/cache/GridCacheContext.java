@@ -567,6 +567,13 @@ public class GridCacheContext<K, V> implements Externalizable {
     }
 
     /**
+     * @return {@code True} if cache is partitioned cache.
+     */
+    public boolean isPartitioned() {
+        return cacheCfg.getCacheMode() == CacheMode.PARTITIONED;
+    }
+
+    /**
      * @return {@code True} in case replication is enabled.
      */
     public boolean isDrEnabled() {

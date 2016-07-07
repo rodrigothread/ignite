@@ -108,6 +108,9 @@ public class IgniteCacheDistributedJoinQueryTest extends GridCommonAbstractTest 
 
             List<Integer> orgIds = putData1();
 
+            checkQuery("select _key, name from \"org\".Organization o " +
+                "inner join (select orgId from Person) p on p.orgId = o._key", pCache, total);
+
             checkQuery("select o._key, o.name, p._key, p.name " +
                 "from \"org\".Organization o, Person p " +
                 "where p.orgId = o._key", pCache, total);
@@ -328,6 +331,46 @@ public class IgniteCacheDistributedJoinQueryTest extends GridCommonAbstractTest 
             checkQuery("select p1._key, p1.name, p2._key, p2.name " +
                 "from Person p1, Person p2 " +
                 "where p1.name > p2.name", pCache, 3);
+        }
+        finally {
+            client.destroyCache(PERSON_CACHE);
+            client.destroyCache(ORG_CACHE);
+        }
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    public void testJoinQuery5() throws Exception {
+        Ignite client = grid(2);
+
+        try {
+            CacheConfiguration ccfg1 = cacheConfiguration(PERSON_CACHE).setQueryEntities(F.asList(personEntity(false, false)));
+            CacheConfiguration ccfg2 = cacheConfiguration(ORG_CACHE).setQueryEntities(F.asList(organizationEntity(false)));
+
+            IgniteCache<Object, Object> pCache = client.createCache(ccfg1);
+            IgniteCache<Object, Object> orgCache = client.createCache(ccfg2);
+
+            ClusterNode node0 = ignite(0).cluster().localNode();
+            ClusterNode node1 = ignite(1).cluster().localNode();
+
+            Affinity<Object> aff = client.affinity(PERSON_CACHE);
+
+            AtomicInteger orgKey = new AtomicInteger();
+            AtomicInteger pKey = new AtomicInteger();
+
+            Integer orgId = keyForNode(aff, orgKey, node0);
+
+            orgCache.put(orgId, new Organization("org-" + orgId));
+
+            Integer pId = keyForNode(aff, pKey, node1);
+
+            pCache.put(pId, new Person(orgId, "p-" + orgId));
+
+            checkQuery("select o._key from \"org\".Organization o, Person p where p.orgId = o._key", pCache, 1);
+
+            checkQuery("select o.name from \"org\".Organization o where o._key in " +
+                "(select o._key from \"org\".Organization o, Person p where p.orgId = o._key)", pCache, 1);
         }
         finally {
             client.destroyCache(PERSON_CACHE);

@@ -1072,14 +1072,6 @@ public class IgniteH2Indexing implements GridQueryIndexing {
     }
 
     /**
-     * @param cctx Cache context.
-     * @return {@code true} If the given cache is partitioned.
-     */
-    public static boolean isPartitioned(GridCacheContext<?,?> cctx) {
-        return !cctx.isReplicated() && !cctx.isLocal();
-    }
-
-    /**
      * @param c Connection.
      * @return Session.
      */
@@ -1095,7 +1087,7 @@ public class IgniteH2Indexing implements GridQueryIndexing {
         Connection c = connectionForSpace(space);
 
         final boolean enforceJoinOrder = qry.isEnforceJoinOrder();
-        final boolean distributedJoins = qry.isDistributedJoins() && isPartitioned(cctx);
+        final boolean distributedJoins = qry.isDistributedJoins() && cctx.isPartitioned();
         final boolean grpByCollocated = qry.isCollocated();
 
         GridCacheTwoStepQuery twoStepQry;

@@ -478,6 +478,11 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
     }
 
     /** {@inheritDoc} */
+    @Override public Cursor find(TableFilter filter, SearchRow first, SearchRow last) {
+        return new GridH2Cursor(doFind(first, true, last));
+    }
+
+    /** {@inheritDoc} */
     @Override public Cursor find(Session ses, @Nullable SearchRow first, @Nullable SearchRow last) {
         return new GridH2Cursor(doFind(first, true, last));
     }
@@ -507,11 +512,28 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
      * @param last Upper bound always inclusive.
      * @return Iterator over rows in given range.
      */
+    private Iterator<GridH2Row> doFind(@Nullable SearchRow first,
+        boolean includeFirst,
+        @Nullable SearchRow last) {
+        return doFind(first, includeFirst, last, true);
+    }
+
+    /**
+     * Returns sub-tree bounded by given values.
+     *
+     * @param first Lower bound.
+     * @param includeFirst Whether lower bound should be inclusive.
+     * @param last Upper bound always inclusive.
+     * @return Iterator over rows in given range.
+     */
     @SuppressWarnings("unchecked")
-    private Iterator<GridH2Row> doFind(@Nullable SearchRow first, boolean includeFirst, @Nullable SearchRow last) {
+    private Iterator<GridH2Row> doFind(@Nullable SearchRow first,
+        boolean includeFirst,
+        @Nullable SearchRow last,
+        boolean filter) {
         ConcurrentNavigableMap<GridSearchRowPointer, GridH2Row> t = treeForRead();
 
-        return doFind0(t, first, includeFirst, last, threadLocalFilter());
+        return doFind0(t, first, includeFirst, last, filter ? threadLocalFilter() : null);
     }
 
     /**

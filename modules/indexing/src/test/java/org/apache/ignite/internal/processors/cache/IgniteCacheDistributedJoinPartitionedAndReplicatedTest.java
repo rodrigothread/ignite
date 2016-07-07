@@ -163,11 +163,11 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
     public void testJoin() throws Exception {
         Ignite client = grid(2);
 
-        Affinity<Object> aff = client.affinity(PERSON_CACHE);
-
         IgniteCache<Object, Object> personCache = client.cache(PERSON_CACHE);
         IgniteCache<Object, Object> orgCache = client.cache(ORG_CACHE);
         IgniteCache<Object, Object> accCache = client.cache(ACCOUNT_CACHE);
+
+        Affinity<Object> aff = client.affinity(PERSON_CACHE);
 
         AtomicInteger pKey = new AtomicInteger(100_000);
         AtomicInteger orgKey = new AtomicInteger();
@@ -190,6 +190,10 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
         accCache.put(keyForNode(aff, accKey, node0), new Account(pid, orgId1, "a0"));
         accCache.put(keyForNode(aff, accKey, node1), new Account(pid, orgId1, "a1"));
 
+//        checkQuery("select p._key, p.name, a.name " +
+//            "from \"person\".Person p, \"acc\".Account a " +
+//            "where p._key = a.personId", orgCache, true, 2);
+
         checkQuery("select o.name, p._key, p.name, a.name " +
             "from \"org\".Organization o, \"person\".Person p, \"acc\".Account a " +
             "where p.orgId = o._key and p._key = a.personId", orgCache, true, 2);
@@ -201,6 +205,34 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
         checkQuery("select o.name, p._key, p.name, a.name " +
             "from \"person\".Person p, \"org\".Organization o, \"acc\".Account a " +
             "where p.orgId = o._key and p._key = a.personId", orgCache, true, 2);
+
+        String[] cacheNames = {"\"org\".Organization o", "\"person\".Person p", "\"acc\".Account a"};
+
+        for (int c1 = 0; c1 < cacheNames.length; c1++) {
+            for (int c2 = 0; c2 < cacheNames.length; c2++) {
+                if (c2 == c1)
+                    continue;
+
+                for (int c3 = 0; c3 < cacheNames.length; c3++) {
+                    if (c3 == c1 || c3 == c2)
+                        continue;
+
+                    String cache1 = cacheNames[c1];
+                    String cache2 = cacheNames[c2];
+                    String cache3 = cacheNames[c3];
+
+                    StringBuilder qry = new StringBuilder("select o.name, p._key, p.name, a.name from ").
+                        append(cache1).append(", ").
+                        append(cache2).append(", ").
+                        append(cache3).append(" ").
+                        append("where p.orgId = o._key and p._key = a.personId");
+
+                    checkQuery(qry.toString(), orgCache, true, 2);
+
+                    checkQuery(qry.toString(), orgCache, false, 2);
+                }
+            }
+        }
     }
     
     /**
