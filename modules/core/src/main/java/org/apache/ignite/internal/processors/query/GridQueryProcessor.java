@@ -37,6 +37,7 @@ import org.apache.ignite.events.CacheQueryExecutedEvent;
 import org.apache.ignite.internal.GridKernalContext;
 import org.apache.ignite.internal.IgniteInternalFuture;
 import org.apache.ignite.internal.binary.BinaryMarshaller;
+import org.apache.ignite.internal.binary.BinaryObjectEx;
 import org.apache.ignite.internal.processors.GridProcessorAdapter;
 import org.apache.ignite.internal.processors.cache.CacheEntryImpl;
 import org.apache.ignite.internal.processors.cache.CacheObject;
@@ -1914,7 +1915,7 @@ public class GridQueryProcessor extends GridProcessorAdapter {
             BinaryField field0 = field;
 
             if (field0 == null && !fieldTaken) {
-                BinaryType type = obj.type();
+                BinaryType type = obj instanceof BinaryObjectEx ? ((BinaryObjectEx)obj).rawType() : obj.type();
 
                 if (type != null) {
                     field0 = type.field(propName);
