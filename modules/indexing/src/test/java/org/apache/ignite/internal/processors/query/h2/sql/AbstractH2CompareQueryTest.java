@@ -56,6 +56,9 @@ public abstract class AbstractH2CompareQueryTest extends GridCommonAbstractTest 
     /** */
     private static final TcpDiscoveryIpFinder IP_FINDER = new TcpDiscoveryVmIpFinder(true);
 
+    /** */
+    protected static final int SRVS = 4;
+
     /** Partitioned cache. */
     protected static IgniteCache pCache;
 
@@ -122,7 +125,7 @@ public abstract class AbstractH2CompareQueryTest extends GridCommonAbstractTest 
     @Override protected void beforeTestsStarted() throws Exception {
         super.beforeTestsStarted();
 
-        Ignite ignite = startGrids(4);
+        Ignite ignite = startGrids(SRVS);
 
         pCache = ignite.cache("part");
 
@@ -268,10 +271,32 @@ public abstract class AbstractH2CompareQueryTest extends GridCommonAbstractTest 
      * @return Result set after SQL query execution.
      * @throws SQLException If exception.
      */
+    protected static List<List<?>> compareQueryRes0(IgniteCache cache,
+        String sql,
+        boolean distrib,
+        @Nullable Object[] args,
+        Ordering ordering) throws SQLException {
+        return compareQueryRes0(cache, sql, distrib, false, args, ordering);
+    }
+
+    /**
+     * Execute given sql query on h2 database and on ignite cache and compare results.
+     *
+     * @param cache Ignite cache.
+     * @param sql SQL query.
+     * @param distrib Distributed SQL Join flag.
+     * @param enforceJoinOrder Enforce join order flag.
+     * @param args SQL arguments.
+     * @param ordering Expected ordering of SQL results. If {@link Ordering#ORDERED}
+     *      then results will compare as ordered queries.
+     * @return Result set after SQL query execution.
+     * @throws SQLException If exception.
+     */
     @SuppressWarnings("unchecked")
     protected static List<List<?>> compareQueryRes0(IgniteCache cache,
         String sql,
         boolean distrib,
+        boolean enforceJoinOrder,
         @Nullable Object[] args,
         Ordering ordering) throws SQLException {
         if (args == null)
@@ -286,7 +311,10 @@ public abstract class AbstractH2CompareQueryTest extends GridCommonAbstractTest 
 //
 //        X.println("Plan : " + plan);
 
-        List<List<?>> cacheRes = cache.query(new SqlFieldsQuery(sql).setArgs(args).setDistributedJoins(distrib)).getAll();
+        List<List<?>> cacheRes = cache.query(new SqlFieldsQuery(sql).
+            setArgs(args).
+            setDistributedJoins(distrib).
+            setEnforceJoinOrder(enforceJoinOrder)).getAll();
 
         try {
             assertRsEquals(h2Res, cacheRes, ordering);

@@ -156,7 +156,7 @@ public class GridH2Table extends TableBase {
      * @return {@code true} If this is a partitioned table.
      */
     public boolean isPartitioned() {
-        return desc != null && IgniteH2Indexing.isPartitioned(desc.context());
+        return desc != null && desc.context().isPartitioned();
     }
 
     /**
@@ -909,7 +909,7 @@ public class GridH2Table extends TableBase {
 
         /** {@inheritDoc} */
         @Override public Cursor find(TableFilter filter, SearchRow first, SearchRow last) {
-            return find(filter.getSession(), first, last);
+            return delegate.find(filter, first, last);
         }
 
         /** {@inheritDoc} */

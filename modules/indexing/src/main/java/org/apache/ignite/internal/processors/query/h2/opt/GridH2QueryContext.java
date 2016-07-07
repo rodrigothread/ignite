@@ -85,7 +85,7 @@ public class GridH2QueryContext {
     private int pageSize;
 
     /** */
-    private GridH2CollocationModel qryCollocationModel;
+    private GridH2CollocationModel qryCollocationMdl;
 
     /**
      * @param locNodeId Local node ID.
@@ -122,14 +122,14 @@ public class GridH2QueryContext {
      * @return Query collocation model.
      */
     public GridH2CollocationModel queryCollocationModel() {
-        return qryCollocationModel;
+        return qryCollocationMdl;
     }
 
     /**
-     * @param qryCollocationModel Query collocation model.
+     * @param qryCollocationMdl Query collocation model.
      */
-    public void queryCollocationModel(GridH2CollocationModel qryCollocationModel) {
-        this.qryCollocationModel = qryCollocationModel;
+    public void queryCollocationModel(GridH2CollocationModel qryCollocationMdl) {
+        this.qryCollocationMdl = qryCollocationMdl;
     }
 
     /**
@@ -557,13 +557,13 @@ public class GridH2QueryContext {
 
         /** {@inheritDoc} */
         @Override public int hashCode() {
-            int result = locNodeId.hashCode();
+            int res = locNodeId.hashCode();
 
-            result = 31 * result + nodeId.hashCode();
-            result = 31 * result + (int)(qryId ^ (qryId >>> 32));
-            result = 31 * result + type.hashCode();
+            res = 31 * res + nodeId.hashCode();
+            res = 31 * res + (int)(qryId ^ (qryId >>> 32));
+            res = 31 * res + type.hashCode();
 
-            return result;
+            return res;
         }
 
         /** {@inheritDoc} */
@@ -593,9 +593,9 @@ public class GridH2QueryContext {
 
         /** {@inheritDoc} */
         @Override public boolean equals(Object o) {
-            SourceKey sourceKey = (SourceKey)o;
+            SourceKey srcKey = (SourceKey)o;
 
-            return batchLookupId == sourceKey.batchLookupId && ownerId.equals(sourceKey.ownerId);
+            return batchLookupId == srcKey.batchLookupId && ownerId.equals(srcKey.ownerId);
         }
 
         /** {@inheritDoc} */

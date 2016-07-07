@@ -768,6 +768,7 @@ public class GridQueryProcessor extends GridProcessorAdapter {
     /**
      * @param cctx Cache context.
      * @param qry Query.
+     * @param keepBinary Keep binary flag.
      * @return Cursor.
      */
     public <K, V> Iterator<Cache.Entry<K, V>> queryLocal(
