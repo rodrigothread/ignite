@@ -21,6 +21,8 @@ import java.io.Externalizable;
 import java.io.IOException;
 import java.io.ObjectInput;
 import java.io.ObjectOutput;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import org.apache.ignite.cache.query.QueryMetrics;
 import org.apache.ignite.internal.util.GridAtomicLong;
 import org.apache.ignite.internal.util.typedef.internal.S;
@@ -55,6 +57,9 @@ public class GridCacheQueryMetricsAdapter implements QueryMetrics, Externalizabl
 
     /** Number of fails. */
     private final LongAdder8 fails = new LongAdder8();
+
+    // TODO IGNITE-3443
+    private final Map<String, String> perQryMetrics = new ConcurrentHashMap<>(100);
 
     /** {@inheritDoc} */
     @Override public long minimumTime() {
