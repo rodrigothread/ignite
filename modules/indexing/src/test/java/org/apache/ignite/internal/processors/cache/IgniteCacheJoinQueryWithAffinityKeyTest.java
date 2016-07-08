@@ -52,7 +52,7 @@ import static org.apache.ignite.cache.CacheWriteSynchronizationMode.FULL_SYNC;
  *
  */
 @SuppressWarnings("unchecked")
-public class IgniteCacheJoinQueryTest extends GridCommonAbstractTest {
+public class IgniteCacheJoinQueryWithAffinityKeyTest extends GridCommonAbstractTest {
     /** */
     private static final TcpDiscoveryIpFinder IP_FINDER = new TcpDiscoveryVmIpFinder(true);
 
