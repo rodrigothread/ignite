@@ -44,7 +44,7 @@ import static org.apache.ignite.cache.CacheWriteSynchronizationMode.FULL_SYNC;
 /**
  *
  */
-public class IgniteCacheDistributedJoinQueryTest extends GridCommonAbstractTest {
+public class IgniteCacheDistributedJoinQueryConditionsTest extends GridCommonAbstractTest {
     /** */
     private static final TcpDiscoveryIpFinder IP_FINDER = new TcpDiscoveryVmIpFinder(true);
 
@@ -95,21 +95,37 @@ public class IgniteCacheDistributedJoinQueryTest extends GridCommonAbstractTest 
      * @throws Exception If failed.
      */
     public void testJoinQuery1() throws Exception {
+        joinQuery1(true);
+
+        joinQuery1(false);
+    }
+
+    /**
+     * @param idx Use index flag.
+     * @throws Exception If failed.
+     */
+    private void joinQuery1(boolean idx) throws Exception {
         Ignite client = grid(2);
 
         try {
             CacheConfiguration ccfg1 =
-                cacheConfiguration(PERSON_CACHE).setQueryEntities(F.asList(personEntity(false, false)));
+                cacheConfiguration(PERSON_CACHE).setQueryEntities(F.asList(personEntity(idx, idx)));
             CacheConfiguration ccfg2 =
-                cacheConfiguration(ORG_CACHE).setQueryEntities(F.asList(organizationEntity(false)));
+                cacheConfiguration(ORG_CACHE).setQueryEntities(F.asList(organizationEntity(idx)));
 
             IgniteCache<Object, Object> pCache = client.createCache(ccfg1);
             IgniteCache<Object, Object> orgCache = client.createCache(ccfg2);
 
             List<Integer> orgIds = putData1();
 
-            checkQuery("select _key, name from \"org\".Organization o " +
-                "inner join (select orgId from Person) p on p.orgId = o._key", pCache, total);
+//            checkQuery("select * from " +
+//                "(select _key, name from \"org\".Organization) o " +
+//                "inner join " +
+//                "(select orgId from Person) p " +
+//                "on p.orgId = o._key", pCache, total);
+//
+//            checkQuery("select _key, name from \"org\".Organization o " +
+//                "inner join (select orgId from Person) p on p.orgId = o._key", pCache, total);
 
             checkQuery("select o._key, o.name, p._key, p.name " +
                 "from \"org\".Organization o, Person p " +
@@ -369,8 +385,8 @@ public class IgniteCacheDistributedJoinQueryTest extends GridCommonAbstractTest 
 
             checkQuery("select o._key from \"org\".Organization o, Person p where p.orgId = o._key", pCache, 1);
 
-            checkQuery("select o.name from \"org\".Organization o where o._key in " +
-                "(select o._key from \"org\".Organization o, Person p where p.orgId = o._key)", pCache, 1);
+//            checkQuery("select o.name from \"org\".Organization o where o._key in " +
+//                "(select o._key from \"org\".Organization o, Person p where p.orgId = o._key)", pCache, 1);
         }
         finally {
             client.destroyCache(PERSON_CACHE);

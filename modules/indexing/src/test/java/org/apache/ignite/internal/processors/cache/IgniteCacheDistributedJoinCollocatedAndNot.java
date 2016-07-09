@@ -24,8 +24,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
 import org.apache.ignite.cache.QueryEntity;
-import org.apache.ignite.cache.QueryIndex;
 import org.apache.ignite.cache.affinity.Affinity;
+import org.apache.ignite.cache.affinity.AffinityKeyMapped;
 import org.apache.ignite.cache.query.QueryCursor;
 import org.apache.ignite.cache.query.SqlFieldsQuery;
 import org.apache.ignite.cluster.ClusterNode;
@@ -40,13 +40,12 @@ import org.apache.ignite.testframework.junits.common.GridCommonAbstractTest;
 
 import static org.apache.ignite.cache.CacheAtomicWriteOrderMode.PRIMARY;
 import static org.apache.ignite.cache.CacheAtomicityMode.ATOMIC;
-import static org.apache.ignite.cache.CacheMode.REPLICATED;
 import static org.apache.ignite.cache.CacheWriteSynchronizationMode.FULL_SYNC;
 
 /**
  *
  */
-public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends GridCommonAbstractTest {
+public class IgniteCacheDistributedJoinCollocatedAndNot extends GridCommonAbstractTest {
     /** */
     private static final TcpDiscoveryIpFinder IP_FINDER = new TcpDiscoveryVmIpFinder(true);
 
@@ -70,44 +69,17 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
 
         spi.setIpFinder(IP_FINDER);
 
-        cfg.setClientMode(client);
-
-        return cfg;
-    }
-
-    /**
-     * @param name Cache name.
-     * @return Cache configuration.
-     */
-    private CacheConfiguration configuration(String name) {
-        CacheConfiguration ccfg = new CacheConfiguration();
-
-        ccfg.setName(name);
-        ccfg.setWriteSynchronizationMode(FULL_SYNC);
-        ccfg.setAtomicWriteOrderMode(PRIMARY);
-        ccfg.setAtomicityMode(ATOMIC);
-        ccfg.setBackups(1);
-
-        return ccfg;
-    }
-
-    private List<CacheConfiguration> caches(boolean idx) {
         List<CacheConfiguration> ccfgs = new ArrayList<>();
 
         {
             CacheConfiguration ccfg = configuration(PERSON_CACHE);
 
-            // One cache is replicated.
-            ccfg.setCacheMode(REPLICATED);
-
             QueryEntity entity = new QueryEntity();
-            entity.setKeyType(Integer.class.getName());
+            entity.setKeyType(PersonKey.class.getName());
             entity.setValueType(Person.class.getName());
-            entity.addQueryField("orgId", Integer.class.getName(), null);
+            entity.addQueryField("id", Integer.class.getName(), null);
+            entity.addQueryField("affKey", Integer.class.getName(), null);
             entity.addQueryField("name", String.class.getName(), null);
-
-            if (idx)
-                entity.setIndexes(F.asList(new QueryIndex("orgId"), new QueryIndex("name")));
 
             ccfg.setQueryEntities(F.asList(entity));
 
@@ -122,9 +94,6 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
             entity.setValueType(Organization.class.getName());
             entity.addQueryField("name", String.class.getName(), null);
 
-            if (idx)
-                entity.setIndexes(F.asList(new QueryIndex("name")));
-
             ccfg.setQueryEntities(F.asList(entity));
 
             ccfgs.add(ccfg);
@@ -136,22 +105,19 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
             QueryEntity entity = new QueryEntity();
             entity.setKeyType(Integer.class.getName());
             entity.setValueType(Account.class.getName());
-            entity.addQueryField("orgId", Integer.class.getName(), null);
             entity.addQueryField("personId", Integer.class.getName(), null);
             entity.addQueryField("name", String.class.getName(), null);
-
-            if (idx) {
-                entity.setIndexes(F.asList(new QueryIndex("orgId"),
-                    new QueryIndex("personId"),
-                    new QueryIndex("name")));
-            }
 
             ccfg.setQueryEntities(F.asList(entity));
 
             ccfgs.add(ccfg);
         }
 
-        return ccfgs;
+        cfg.setCacheConfiguration(ccfgs.toArray(new CacheConfiguration[ccfgs.size()]));
+
+        cfg.setClientMode(client);
+
+        return cfg;
     }
 
     /** {@inheritDoc} */
@@ -173,115 +139,100 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
     }
 
     /**
-     * @throws Exception If failed.
+     * @param name Cache name.
+     * @return Cache configuration.
      */
-    public void testJoin() throws Exception {
-        join(true);
+    private CacheConfiguration configuration(String name) {
+        CacheConfiguration ccfg = new CacheConfiguration();
 
-        join(false);
+        ccfg.setName(name);
+        ccfg.setWriteSynchronizationMode(FULL_SYNC);
+        ccfg.setAtomicWriteOrderMode(PRIMARY);
+        ccfg.setAtomicityMode(ATOMIC);
+        ccfg.setBackups(1);
+
+        return ccfg;
     }
 
     /**
-     * @param idx Use index flag.
      * @throws Exception If failed.
      */
-    private void join(boolean idx) throws Exception {
+    public void testJoin() throws Exception {
         Ignite client = grid(2);
 
-        for (CacheConfiguration ccfg : caches(idx))
-            client.createCache(ccfg);
+        IgniteCache<Object, Object> personCache = client.cache(PERSON_CACHE);
+        IgniteCache<Object, Object> orgCache = client.cache(ORG_CACHE);
+        IgniteCache<Object, Object> accCache = client.cache(ACCOUNT_CACHE);
 
-        try {
-            IgniteCache<Object, Object> personCache = client.cache(PERSON_CACHE);
-            IgniteCache<Object, Object> orgCache = client.cache(ORG_CACHE);
-            IgniteCache<Object, Object> accCache = client.cache(ACCOUNT_CACHE);
+        Affinity<Object> aff = client.affinity(PERSON_CACHE);
 
-            Affinity<Object> aff = client.affinity(PERSON_CACHE);
+        AtomicInteger orgKey = new AtomicInteger();
+        AtomicInteger accKey = new AtomicInteger();
 
-            AtomicInteger pKey = new AtomicInteger(100_000);
-            AtomicInteger orgKey = new AtomicInteger();
-            AtomicInteger accKey = new AtomicInteger();
+        ClusterNode node0 = ignite(0).cluster().localNode();
+        ClusterNode node1 = ignite(1).cluster().localNode();
 
-            ClusterNode node0 = ignite(0).cluster().localNode();
-            ClusterNode node1 = ignite(1).cluster().localNode();
+        /**
+         * One organization, one person, two accounts.
+         */
 
-            /**
-             * One organization, one person, two accounts.
-             */
+        int orgId1 = keyForNode(aff, orgKey, node0);
 
-            int orgId1 = keyForNode(aff, orgKey, node0);
+        orgCache.put(orgId1, new Organization("obj-" + orgId1));
 
-            orgCache.put(orgId1, new Organization("obj-" + orgId1));
+        personCache.put(new PersonKey(1, orgId1), new Person(1, "o1-p1"));
+        personCache.put(new PersonKey(2, orgId1), new Person(2, "o1-p2"));
 
-            int pid = keyForNode(aff, pKey, node0);
-            personCache.put(pid, new Person(orgId1, "o1-p1"));
+        accCache.put(keyForNode(aff, accKey, node0), new Account(1, "a0"));
+        accCache.put(keyForNode(aff, accKey, node1), new Account(1, "a1"));
 
-            accCache.put(keyForNode(aff, accKey, node0), new Account(pid, orgId1, "a0"));
-            accCache.put(keyForNode(aff, accKey, node1), new Account(pid, orgId1, "a1"));
+        // Join on affinity keys equals condition should not be distributed.
+        String qry = "select o.name, p._key, p.name " +
+            "from \"org\".Organization o, \"person\".Person p " +
+            "where p.affKey = o._key";
 
-            checkQuery("select p._key, p.name, a.name " +
-                "from \"person\".Person p, \"acc\".Account a " +
-                "where p._key = a.personId", orgCache, true, 2);
+        assertFalse(plan(qry, orgCache, false).contains("batched"));
 
-            checkQuery("select o.name, p._key, p.name, a.name " +
-                "from \"org\".Organization o, \"person\".Person p, \"acc\".Account a " +
-                "where p.orgId = o._key and p._key = a.personId", orgCache, true, 2);
+        checkQuery(qry, orgCache, false, 2);
 
-            checkQuery("select o.name, p._key, p.name, a.name " +
-                "from \"org\".Organization o, \"acc\".Account a, \"person\".Person p " +
-                "where p.orgId = o._key and p._key = a.personId", orgCache, true, 2);
+        qry = "select o.name, p._key, p.name " +
+            "from \"org\".Organization o, \"person\".Person p " +
+            "where p.affKey != o._key";
 
-            checkQuery("select o.name, p._key, p.name, a.name " +
-                "from \"person\".Person p, \"org\".Organization o, \"acc\".Account a " +
-                "where p.orgId = o._key and p._key = a.personId", orgCache, true, 2);
+        assertTrue(plan(qry, orgCache, false).contains("batched"));
 
-            String[] cacheNames = {"\"org\".Organization o", "\"person\".Person p", "\"acc\".Account a"};
+        checkQuery(qry, orgCache, false, 0);
 
-            for (int c1 = 0; c1 < cacheNames.length; c1++) {
-                for (int c2 = 0; c2 < cacheNames.length; c2++) {
-                    if (c2 == c1)
-                        continue;
-
-                    for (int c3 = 0; c3 < cacheNames.length; c3++) {
-                        if (c3 == c1 || c3 == c2)
-                            continue;
-
-                        String cache1 = cacheNames[c1];
-                        String cache2 = cacheNames[c2];
-                        String cache3 = cacheNames[c3];
-
-                        StringBuilder qry = new StringBuilder("select o.name, p._key, p.name, a.name from ").
-                            append(cache1).append(", ").
-                            append(cache2).append(", ").
-                            append(cache3).append(" ").
-                            append("where p.orgId = o._key and p._key = a.personId");
-
-                        checkQuery(qry.toString(), orgCache, true, 2);
-
-                        checkQuery(qry.toString(), orgCache, false, 2);
-                    }
-                }
-            }
-        }
-        finally {
-            client.destroyCache(PERSON_CACHE);
-            client.destroyCache(ORG_CACHE);
-            client.destroyCache(ACCOUNT_CACHE);
-        }
+        checkQuery("select o.name, p._key, p.name, a.name " +
+            "from \"org\".Organization o, \"person\".Person p, \"acc\".Account a " +
+            "where p.affKey = o._key and p.id = a.personId", orgCache, true, 2);
     }
-    
+
+    /**
+     * @param sql SQL.
+     * @param cache Cache.
+     * @param enforceJoinOrder Enforce join order flag.
+     * @return Query plan.
+     */
+    private String plan(String sql,
+        IgniteCache<?, ?> cache,
+        boolean enforceJoinOrder) {
+        return (String)cache.query(new SqlFieldsQuery("explain " + sql)
+            .setDistributedJoins(true)
+            .setEnforceJoinOrder(enforceJoinOrder))
+            .getAll().get(0).get(0);
+    }
+
     /**
      * @param sql SQL.
      * @param cache Cache.
      * @param enforceJoinOrder Enforce join order flag.
      * @param expSize Expected results size.
-     * @param args Arguments.
      */
     private void checkQuery(String sql,
         IgniteCache<Object, Object> cache,
         boolean enforceJoinOrder,
-        int expSize,
-        Object... args) {
+        int expSize) {
         String plan = (String)cache.query(new SqlFieldsQuery("explain " + sql)
             .setDistributedJoins(true)
             .setEnforceJoinOrder(enforceJoinOrder))
@@ -293,7 +244,6 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
 
         qry.setDistributedJoins(true);
         qry.setEnforceJoinOrder(enforceJoinOrder);
-        qry.setArgs(args);
 
         QueryCursor<List<?>> cur = cache.query(qry);
 
@@ -304,6 +254,44 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
 
         assertEquals(expSize, res.size());
     }
+    /**
+     *
+     */
+    public static class PersonKey {
+        /** */
+        private int id;
+
+        /** */
+        @AffinityKeyMapped
+        private int affKey;
+
+        /**
+         * @param id Key.
+         * @param affKey Affinity key.
+         */
+        public PersonKey(int id, int affKey) {
+            this.id = id;
+            this.affKey = affKey;
+        }
+
+        /** {@inheritDoc} */
+        @Override public boolean equals(Object o) {
+            if (this == o)
+                return true;
+
+            if (o == null || getClass() != o.getClass())
+                return false;
+
+            PersonKey other = (PersonKey)o;
+
+            return id == other.id;
+        }
+
+        /** {@inheritDoc} */
+        @Override public int hashCode() {
+            return id;
+        }
+    }
 
     /**
      *
@@ -313,19 +301,14 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
         int personId;
 
         /** */
-        int orgId;
-
-        /** */
         String name;
 
         /**
          * @param personId Person ID.
-         * @param orgId Organization ID.
          * @param name Name.
          */
-        public Account(int personId, int orgId, String name) {
+        public Account(int personId, String name) {
             this.personId = personId;
-            this.orgId = orgId;
             this.name = name;
         }
 
@@ -340,17 +323,17 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
      */
     private static class Person implements Serializable {
         /** */
-        int orgId;
+        int id;
 
         /** */
         String name;
 
         /**
-         * @param orgId Organization ID.
+         * @param id Person ID.
          * @param name Name.
          */
-        public Person(int orgId, String name) {
-            this.orgId = orgId;
+        public Person(int id, String name) {
+            this.id = id;
             this.name = name;
         }
 

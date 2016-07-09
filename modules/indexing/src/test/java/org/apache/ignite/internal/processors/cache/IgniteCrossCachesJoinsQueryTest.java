@@ -624,8 +624,11 @@ public class IgniteCrossCachesJoinsQueryTest extends AbstractH2CompareQueryTest 
 
                     checkOrganizationPersonAccountJoin(cache);
 
-                    checkUnion();
-                    checkUnionAll();
+                    if (!(personCacheType.cacheMode == REPLICATED) && !(orgCacheType.cacheMode == REPLICATED)
+                        && !(accCacheType.cacheMode == REPLICATED)) {
+                        checkUnion();
+                        checkUnionAll();
+                    }
 
                     if (!cache.getName().equals(orgCacheType.cacheName))
                         checkPersonAccountCrossJoin(cache);

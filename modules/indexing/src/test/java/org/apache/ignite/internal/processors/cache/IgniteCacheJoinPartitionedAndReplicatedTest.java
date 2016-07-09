@@ -179,6 +179,20 @@ public class IgniteCacheJoinPartitionedAndReplicatedTest extends GridCommonAbstr
             "on (p.orgId = o.id)", orgCache, 2);
 
         checkQuery("select o.name, p._key, p.name " +
+            "from \"person\".Person p join \"orgRepl\".Organization o " +
+            "on (p.orgId = o.id)", orgCacheRepl, 2);
+
+        checkQuery("select o.name, p._key, p.name " +
+            "from \"orgRepl\".Organization o join \"person\".Person p " +
+            "on (p.orgId = o.id)", orgCacheRepl, 2);
+
+        checkQuery("select p.name from \"person\".Person p ", ignite(0).cache(PERSON_CACHE), 2);
+        checkQuery("select p.name from \"person\".Person p ", ignite(1).cache(PERSON_CACHE), 2);
+
+        for (int i = 0; i < 10; i++)
+            checkQuery("select p.name from \"person\".Person p ", personCache, 2);
+
+        checkQuery("select o.name, p._key, p.name " +
             "from \"person\".Person p left join \"org\".Organization o " +
             "on (p.orgId = o.id)", orgCache, 2);
 
@@ -187,26 +201,12 @@ public class IgniteCacheJoinPartitionedAndReplicatedTest extends GridCommonAbstr
             "on (p.orgId = o.id)", orgCache, 2);
 
         checkQuery("select o.name, p._key, p.name " +
-            "from \"person\".Person p join \"orgRepl\".Organization o " +
-            "on (p.orgId = o.id)", orgCacheRepl, 2);
-
-        checkQuery("select o.name, p._key, p.name " +
-            "from \"orgRepl\".Organization o join \"person\".Person p " +
-            "on (p.orgId = o.id)", orgCacheRepl, 2);
-
-        checkQuery("select o.name, p._key, p.name " +
             "from \"person\".Person p left join \"orgRepl\".Organization o " +
             "on (p.orgId = o.id)", orgCacheRepl, 2);
 
         checkQuery("select o.name, p._key, p.name " +
             "from \"orgRepl\".Organization o left join \"person\".Person p " +
             "on (p.orgId = o.id)", orgCacheRepl, 2);
-
-        checkQuery("select p.name from \"person\".Person p ", ignite(0).cache(PERSON_CACHE), 2);
-        checkQuery("select p.name from \"person\".Person p ", ignite(1).cache(PERSON_CACHE), 2);
-
-        for (int i = 0; i < 10; i++)
-            checkQuery("select p.name from \"person\".Person p ", personCache, 2);
     }
 
     /**
