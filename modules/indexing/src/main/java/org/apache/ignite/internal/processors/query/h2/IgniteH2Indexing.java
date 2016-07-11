@@ -1871,9 +1871,6 @@ public class IgniteH2Indexing implements GridQueryIndexing {
             @Nullable @Override public <K, V> IgniteBiPredicate<K, V> forSpace(String spaceName) {
                 final GridCacheAdapter<Object, Object> cache = ctx.cache().internalCache(spaceName);
 
-                if (cache.context().isReplicated())
-                    return null;
-
                 final GridCacheAffinityManager aff = cache.context().affinity();
 
                 if (parts != null) {

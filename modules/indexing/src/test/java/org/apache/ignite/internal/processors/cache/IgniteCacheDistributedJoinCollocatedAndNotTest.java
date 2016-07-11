@@ -45,7 +45,7 @@ import static org.apache.ignite.cache.CacheWriteSynchronizationMode.FULL_SYNC;
 /**
  *
  */
-public class IgniteCacheDistributedJoinCollocatedAndNot extends GridCommonAbstractTest {
+public class IgniteCacheDistributedJoinCollocatedAndNotTest extends GridCommonAbstractTest {
     /** */
     private static final TcpDiscoveryIpFinder IP_FINDER = new TcpDiscoveryVmIpFinder(true);
 

@@ -223,8 +223,8 @@ public final class GridH2CollocationModel {
             // We are at table instance.
             GridH2Table tbl = (GridH2Table)upper.childFilters[filter].getTable();
 
-            // Only partitioned tables will do distributed joins.
-            if (!tbl.isPartitioned()) {
+            // Backup filter is used for REPLICATED cache if this is first cache in query.
+            if (!tbl.isPartitioned() && filter != 0) {
                 type = Type.REPLICATED;
                 multiplier = MULTIPLIER_COLLOCATED;
 

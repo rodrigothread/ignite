@@ -111,7 +111,7 @@ public class GridReduceQueryExecutor {
     private static final IgniteProductVersion DISTRIBUTED_JOIN_SINCE = IgniteProductVersion.fromString("1.4.0");
 
     /** */
-    private boolean oldNodesInTopology = true;
+    private boolean oldNodesInTop = true;
 
     /** */
     private GridKernalContext ctx;
@@ -163,7 +163,7 @@ public class GridReduceQueryExecutor {
     private final GridSpinBusyLock busyLock;
 
     /** */
-    private final CIX2<ClusterNode,Message> locNodeHandler = new CIX2<ClusterNode,Message>() {
+    private final CIX2<ClusterNode,Message> locNodeHnd = new CIX2<ClusterNode,Message>() {
         @Override public void applyx(ClusterNode locNode, Message msg) {
             h2.mapQueryExecutor().onMessage(locNode.id(), msg);
         }
@@ -472,10 +472,10 @@ public class GridReduceQueryExecutor {
      * @return {@code true} If there are old nodes in topology.
      */
     private boolean oldNodesInTopology() {
-        if (!oldNodesInTopology)
+        if (!oldNodesInTop)
             return false;
 
-        NavigableMap<IgniteProductVersion,Collection<ClusterNode>> m = ctx.discovery().topologyVersionMap();
+        NavigableMap<IgniteProductVersion, Collection<ClusterNode>> m = ctx.discovery().topologyVersionMap();
 
         if (!F.isEmpty(m)) {
             for (Map.Entry<IgniteProductVersion,Collection<ClusterNode>> entry : m.entrySet()) {
@@ -490,7 +490,7 @@ public class GridReduceQueryExecutor {
         }
 
         // If we did not find old nodes, we assume that old node will not join further.
-        oldNodesInTopology = false;
+        oldNodesInTop = false;
 
         return false;
     }
@@ -806,6 +806,7 @@ public class GridReduceQueryExecutor {
     /**
      * Gets or creates new fake table for index.
      *
+     * @param c Connection.
      * @param idx Index of table.
      * @return Table.
      */
@@ -1136,7 +1137,7 @@ public class GridReduceQueryExecutor {
         if (log.isDebugEnabled())
             log.debug("Sending: [msg=" + msg + ", nodes=" + nodes + ", specialize=" + specialize + "]");
 
-        return h2.send(GridTopic.TOPIC_QUERY, nodes, msg, specialize, locNodeHandler, QUERY_POOL, runLocParallel);
+        return h2.send(GridTopic.TOPIC_QUERY, nodes, msg, specialize, locNodeHnd, QUERY_POOL, runLocParallel);
     }
 
     /**

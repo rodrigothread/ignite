@@ -37,7 +37,9 @@ import org.jetbrains.annotations.Nullable;
 import static org.apache.ignite.internal.processors.query.h2.opt.GridH2AbstractKeyValueRow.KEY_COL;
 import static org.apache.ignite.internal.processors.query.h2.opt.GridH2AbstractKeyValueRow.VAL_COL;
 import static org.apache.ignite.internal.processors.query.h2.opt.GridH2CollocationModel.buildCollocationModel;
+import static org.apache.ignite.internal.processors.query.h2.opt.GridH2QueryType.LOCAL;
 import static org.apache.ignite.internal.processors.query.h2.opt.GridH2QueryType.PREPARE;
+import static org.apache.ignite.internal.processors.query.h2.opt.GridH2QueryType.REPLICATED;
 
 /**
  * Index base.
@@ -203,12 +205,26 @@ public abstract class GridH2IndexBase extends BaseIndex {
     }
 
     /**
+     * @param tbl Table.
+     * @param tblFilter Table filter.
      * @return Filter for currently running query or {@code null} if none.
      */
-    protected static IndexingQueryFilter threadLocalFilter() {
+    protected static IndexingQueryFilter threadLocalFilter(GridH2Table tbl, TableFilter tblFilter) {
         GridH2QueryContext qctx = GridH2QueryContext.get();
 
-        return qctx == null ? null : qctx.filter();
+        if (qctx != null) {
+            if (!tbl.isPartitioned()) {
+                if (qctx.queryType() == REPLICATED || qctx.queryType() == LOCAL)
+                    return null;
+
+                if (tblFilter == null || tblFilter != tblFilter.getSelect().getTopFilters().get(0))
+                    return null;
+            }
+
+            return qctx.filter();
+        }
+
+        return null;
     }
 
     /** {@inheritDoc} */

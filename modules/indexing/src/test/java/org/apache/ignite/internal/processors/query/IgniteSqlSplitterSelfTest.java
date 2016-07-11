@@ -263,6 +263,7 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
 
             X.println("Plan : " + plan);
 
+            assertEquals(2, StringUtils.countOccurrencesOf(plan, "batched"));
             assertEquals(2, StringUtils.countOccurrencesOf(plan, "batched:unicast"));
 
             assertEquals(2, c.query(new SqlFieldsQuery(select).setDistributedJoins(true)
@@ -276,6 +277,7 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
 
             X.println("Plan : " + plan);
 
+            assertEquals(2, StringUtils.countOccurrencesOf(plan, "batched"));
             assertEquals(2, StringUtils.countOccurrencesOf(plan, "batched:unicast"));
 
             assertEquals(2, c.query(new SqlFieldsQuery(select).setDistributedJoins(true)
@@ -283,6 +285,88 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
         }
         finally {
             c.destroy();
+        }
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    public void testDistributedJoinsUnionPartitionedReplicated() throws Exception {
+        CacheConfiguration ccfg1 = cacheConfig("pers", true,
+            Integer.class, Person2.class);
+        CacheConfiguration ccfg2 = cacheConfig("org", false,
+            Integer.class, Organization.class);
+
+        IgniteCache<Integer, Object> c1 = ignite(0).getOrCreateCache(ccfg1);
+        IgniteCache<Integer, Object> c2 = ignite(0).getOrCreateCache(ccfg2);
+
+        try {
+            c2.put(1, new Organization("o1"));
+            c2.put(2, new Organization("o2"));
+            c1.put(3, new Person2(1, "p1"));
+            c1.put(4, new Person2(2, "p2"));
+            c1.put(5, new Person2(3, "p3"));
+
+            String select0 = "select o.name n1, p.name n2 from \"pers\".Person2 p, \"org\".Organization o where p.orgId = o._key and o._key=1" +
+                " union select o.name n1, p.name n2 from \"org\".Organization o, \"pers\".Person2 p where p.orgId = o._key and o._key=2";
+
+            String plan = (String)c1.query(new SqlFieldsQuery("explain " + select0)
+                .setDistributedJoins(true).setEnforceJoinOrder(true))
+                .getAll().get(0).get(0);
+
+            X.println("Plan : " + plan);
+
+            assertEquals(1, StringUtils.countOccurrencesOf(plan, "batched"));
+            assertEquals(1, StringUtils.countOccurrencesOf(plan, "batched:broadcast"));
+            assertEquals(2, c1.query(new SqlFieldsQuery(select0).setDistributedJoins(true)
+                .setEnforceJoinOrder(true)).getAll().size());
+
+            String select = "select * from (" + select0 + ")";
+
+            plan = (String)c1.query(new SqlFieldsQuery("explain " + select)
+                .setDistributedJoins(true).setEnforceJoinOrder(true))
+                .getAll().get(0).get(0);
+
+            X.println("Plan : " + plan);
+
+            assertEquals(1, StringUtils.countOccurrencesOf(plan, "batched"));
+            assertEquals(1, StringUtils.countOccurrencesOf(plan, "batched:broadcast"));
+            assertEquals(2, c1.query(new SqlFieldsQuery(select).setDistributedJoins(true)
+                .setEnforceJoinOrder(true)).getAll().size());
+
+            String select1 = "select o.name n1, p.name n2 from \"pers\".Person2 p, \"org\".Organization o where p.orgId = o._key and o._key=1" +
+                " union select * from (select o.name n1, p.name n2 from \"org\".Organization o, \"pers\".Person2 p where p.orgId = o._key and o._key=2)";
+
+            plan = (String)c1.query(new SqlFieldsQuery("explain " + select1)
+                .setDistributedJoins(true).setEnforceJoinOrder(true))
+                .getAll().get(0).get(0);
+
+            X.println("Plan : " + plan);
+
+            assertEquals(1, StringUtils.countOccurrencesOf(plan, "batched"));
+            assertEquals(1, StringUtils.countOccurrencesOf(plan, "batched:broadcast"));
+            assertEquals(2, c1.query(new SqlFieldsQuery(select).setDistributedJoins(true)
+                .setEnforceJoinOrder(true)).getAll().size());
+
+            assertEquals(2, c1.query(new SqlFieldsQuery(select).setDistributedJoins(true)
+                .setEnforceJoinOrder(true)).getAll().size());
+
+            select = "select * from (" + select1 + ")";
+
+            plan = (String)c1.query(new SqlFieldsQuery("explain " + select)
+                .setDistributedJoins(true).setEnforceJoinOrder(true))
+                .getAll().get(0).get(0);
+
+            X.println("Plan : " + plan);
+
+            assertEquals(1, StringUtils.countOccurrencesOf(plan, "batched"));
+            assertEquals(1, StringUtils.countOccurrencesOf(plan, "batched:broadcast"));
+            assertEquals(2, c1.query(new SqlFieldsQuery(select).setDistributedJoins(true)
+                .setEnforceJoinOrder(true)).getAll().size());
+        }
+        finally {
+            c1.destroy();
+            c2.destroy();
         }
     }
 
@@ -547,7 +631,7 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
      */
     private static class Person2 implements Serializable {
         /** */
-        @QuerySqlField
+        @QuerySqlField(index = true)
         int orgId;
 
         /** */

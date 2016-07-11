@@ -25,7 +25,8 @@ import org.apache.ignite.internal.processors.cache.GridCacheQuerySerializationSe
 import org.apache.ignite.internal.processors.cache.IgniteBinaryObjectFieldsQuerySelfTest;
 import org.apache.ignite.internal.processors.cache.IgniteBinaryWrappedObjectFieldsQuerySelfTest;
 import org.apache.ignite.internal.processors.cache.IgniteCacheCollocatedQuerySelfTest;
-import org.apache.ignite.internal.processors.cache.IgniteCacheDistributedJoinCollocatedAndNot;
+import org.apache.ignite.internal.processors.cache.IgniteCacheCrossCacheJoinRandomTest;
+import org.apache.ignite.internal.processors.cache.IgniteCacheDistributedJoinCollocatedAndNotTest;
 import org.apache.ignite.internal.processors.cache.IgniteCacheDistributedJoinPartitionedAndReplicatedTest;
 import org.apache.ignite.internal.processors.cache.IgniteCacheDistributedJoinQueryConditionsTest;
 import org.apache.ignite.internal.processors.cache.IgniteCacheDuplicateEntityConfigurationSelfTest;
@@ -124,12 +125,13 @@ public class IgniteCacheQuerySelfTestSuite extends TestSuite {
         suite.addTestSuite(IgniteCacheQueryNoRebalanceSelfTest.class);
 
         suite.addTestSuite(IgniteCacheJoinQueryWithAffinityKeyTest.class);
-        suite.addTestSuite(IgniteCacheDistributedJoinCollocatedAndNot.class);
+        suite.addTestSuite(IgniteCacheDistributedJoinCollocatedAndNotTest.class);
         suite.addTestSuite(IgniteCacheDistributedJoinPartitionedAndReplicatedTest.class);
         suite.addTestSuite(IgniteCacheDistributedJoinQueryConditionsTest.class);
         suite.addTestSuite(IgniteCacheJoinPartitionedAndReplicatedTest.class);
         suite.addTestSuite(IgniteCacheJoinNoIndexTest.class);
         suite.addTestSuite(IgniteCrossCachesJoinsQueryTest.class);
+        suite.addTestSuite(IgniteCacheCrossCacheJoinRandomTest.class);
 
         return suite;
     }

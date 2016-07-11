@@ -65,7 +65,6 @@ import org.apache.ignite.lang.IgniteBiTuple;
 import org.apache.ignite.logger.NullLogger;
 import org.apache.ignite.plugin.extensions.communication.Message;
 import org.apache.ignite.spi.indexing.IndexingQueryFilter;
-import org.h2.command.dml.Select;
 import org.h2.engine.Session;
 import org.h2.index.Cursor;
 import org.h2.index.IndexCondition;
@@ -76,7 +75,6 @@ import org.h2.result.Row;
 import org.h2.result.SearchRow;
 import org.h2.result.SortOrder;
 import org.h2.table.IndexColumn;
-import org.h2.table.Table;
 import org.h2.table.TableFilter;
 import org.h2.util.DoneFuture;
 import org.h2.value.Value;
@@ -415,7 +413,7 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
 
     /** {@inheritDoc} */
     @Override public long getRowCount(@Nullable Session ses) {
-        IndexingQueryFilter f = threadLocalFilter();
+        IndexingQueryFilter f = threadLocalFilter(getTable(), null);
 
         // Fast path if we don't need to perform any filtering.
         if (f == null || f.forSpace((getTable()).spaceName()) == null)
@@ -481,7 +479,7 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
 
     /** {@inheritDoc} */
     @Override public Cursor find(TableFilter filter, SearchRow first, SearchRow last) {
-        return new GridH2Cursor(doFind(first, true, last));
+        return new GridH2Cursor(doFind(first, true, last, filter));
     }
 
     /** {@inheritDoc} */
@@ -517,7 +515,7 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
     private Iterator<GridH2Row> doFind(@Nullable SearchRow first,
         boolean includeFirst,
         @Nullable SearchRow last) {
-        return doFind(first, includeFirst, last, true);
+        return doFind(first, includeFirst, last, null);
     }
 
     /**
@@ -526,16 +524,17 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
      * @param first Lower bound.
      * @param includeFirst Whether lower bound should be inclusive.
      * @param last Upper bound always inclusive.
+     * @param filter Table filter.
      * @return Iterator over rows in given range.
      */
     @SuppressWarnings("unchecked")
     private Iterator<GridH2Row> doFind(@Nullable SearchRow first,
         boolean includeFirst,
         @Nullable SearchRow last,
-        boolean filter) {
+        TableFilter filter) {
         ConcurrentNavigableMap<GridSearchRowPointer, GridH2Row> t = treeForRead();
 
-        return doFind0(t, first, includeFirst, last, filter ? threadLocalFilter() : null);
+        return doFind0(t, first, includeFirst, last, threadLocalFilter(getTable(), filter));
     }
 
     /**
@@ -758,37 +757,6 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
 
         if (qctx == null || !qctx.distributedJoins() || !getTable().isPartitioned())
             return null;
-
-        Select select = filter.getSelect();
-
-        ArrayList<TableFilter> filters = select.getTopFilters();
-
-        if (filters.size() > 1) {
-            for (int i = 0; i < filters.size(); i++) {
-                TableFilter filter0 = filters.get(i);
-
-                if (filter0 == filter) {
-                    if (i == 0)
-                        break;
-
-                    TableFilter prevFilter = filters.get(i - 1);
-
-                    if (prevFilter.getJoin() == filter) {
-                        Table tbl = prevFilter.getTable();
-
-                        if (tbl instanceof GridH2Table && !((GridH2Table)tbl).isPartitioned())
-                            return null;
-
-                        break;
-                    }
-                }
-
-                Table tbl0 = filter0.getTable();
-
-                if (tbl0 instanceof GridH2Table && ((GridH2Table)tbl0).isPartitioned())
-                    break;
-            }
-        }
 
         IndexColumn affCol = getTable().getAffinityKeyColumn();
 
