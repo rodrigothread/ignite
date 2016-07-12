@@ -18,6 +18,7 @@
 package org.apache.ignite.internal.processors.query.h2.opt;
 
 import org.apache.ignite.IgniteCheckedException;
+import org.apache.ignite.configuration.CacheConfiguration;
 import org.apache.ignite.internal.processors.cache.CacheObject;
 import org.apache.ignite.internal.processors.cache.GridCacheContext;
 import org.apache.ignite.internal.processors.query.GridQueryTypeDescriptor;
@@ -51,7 +52,12 @@ public interface GridH2RowDescriptor extends GridOffHeapSmartPointerFactory<Grid
      *
      * @return Cache context.
      */
-    public GridCacheContext<?,?> context();
+    public GridCacheContext<?, ?> context();
+
+    /**
+     * @return Cache configuration.
+     */
+    public CacheConfiguration configuration();
 
     /**
      * Creates new row.

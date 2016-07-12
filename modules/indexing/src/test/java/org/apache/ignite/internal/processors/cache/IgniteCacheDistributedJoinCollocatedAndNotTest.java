@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
 import org.apache.ignite.cache.QueryEntity;
+import org.apache.ignite.cache.QueryIndex;
 import org.apache.ignite.cache.affinity.Affinity;
 import org.apache.ignite.cache.affinity.AffinityKeyMapped;
 import org.apache.ignite.cache.query.QueryCursor;
@@ -93,6 +94,7 @@ public class IgniteCacheDistributedJoinCollocatedAndNotTest extends GridCommonAb
             entity.setKeyType(Integer.class.getName());
             entity.setValueType(Organization.class.getName());
             entity.addQueryField("name", String.class.getName(), null);
+            entity.setIndexes(F.asList(new QueryIndex("name")));
 
             ccfg.setQueryEntities(F.asList(entity));
 
@@ -107,6 +109,7 @@ public class IgniteCacheDistributedJoinCollocatedAndNotTest extends GridCommonAb
             entity.setValueType(Account.class.getName());
             entity.addQueryField("personId", Integer.class.getName(), null);
             entity.addQueryField("name", String.class.getName(), null);
+            entity.setIndexes(F.asList(new QueryIndex("personId"), new QueryIndex("name")));
 
             ccfg.setQueryEntities(F.asList(entity));
 
@@ -194,14 +197,6 @@ public class IgniteCacheDistributedJoinCollocatedAndNotTest extends GridCommonAb
         assertFalse(plan(qry, orgCache, false).contains("batched"));
 
         checkQuery(qry, orgCache, false, 2);
-
-        qry = "select o.name, p._key, p.name " +
-            "from \"org\".Organization o, \"person\".Person p " +
-            "where p.affKey != o._key";
-
-        assertTrue(plan(qry, orgCache, false).contains("batched"));
-
-        checkQuery(qry, orgCache, false, 0);
 
         checkQuery("select o.name, p._key, p.name, a.name " +
             "from \"org\".Organization o, \"person\".Person p, \"acc\".Account a " +

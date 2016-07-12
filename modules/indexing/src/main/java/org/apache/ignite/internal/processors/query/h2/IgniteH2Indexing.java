@@ -2738,6 +2738,11 @@ public class IgniteH2Indexing implements GridQueryIndexing {
         }
 
         /** {@inheritDoc} */
+        @Override public CacheConfiguration configuration() {
+            return schema.ccfg;
+        }
+
+        /** {@inheritDoc} */
         @Override public GridUnsafeGuard guard() {
             return guard;
         }

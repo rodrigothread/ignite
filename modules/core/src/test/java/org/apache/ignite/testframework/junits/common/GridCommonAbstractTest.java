@@ -48,6 +48,7 @@ import org.apache.ignite.cache.CacheAtomicityMode;
 import org.apache.ignite.cache.CachePeekMode;
 import org.apache.ignite.cache.affinity.Affinity;
 import org.apache.ignite.cache.affinity.AffinityFunction;
+import org.apache.ignite.cache.query.SqlFieldsQuery;
 import org.apache.ignite.cluster.ClusterGroup;
 import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.cluster.ClusterTopologyException;
@@ -1192,5 +1193,21 @@ public abstract class GridCommonAbstractTest extends GridAbstractTest {
             if (aff.mapKeyToNode(next).equals(node))
                 return next;
         }
+    }
+
+    /**
+     * @param cache Cache.
+     * @param qry Query.
+     * @return Query plan.
+     */
+    protected final String queryPlan(IgniteCache<?, ?> cache, SqlFieldsQuery qry) {
+        return (String)cache.query(new SqlFieldsQuery("explain " + qry.getSql())
+            .setArgs(qry.getArgs())
+            .setLocal(qry.isLocal())
+            .setCollocated(qry.isCollocated())
+            .setPageSize(qry.getPageSize())
+            .setDistributedJoins(qry.isDistributedJoins())
+            .setEnforceJoinOrder(qry.isEnforceJoinOrder()))
+            .getAll().get(0).get(0);
     }
 }

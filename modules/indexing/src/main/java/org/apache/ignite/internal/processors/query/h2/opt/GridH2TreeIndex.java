@@ -1253,6 +1253,9 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
         /** {@inheritDoc} */
         @SuppressWarnings("ForLoopReplaceableByForEach")
         @Override public boolean addSearchRows(SearchRow firstRow, SearchRow lastRow) {
+            if (firstRow == null && lastRow == null)
+                throw new CacheException("Failed to executed distributed join, index is not used for join condition.");
+
             if (findCalled) {
                 findCalled = false;
 

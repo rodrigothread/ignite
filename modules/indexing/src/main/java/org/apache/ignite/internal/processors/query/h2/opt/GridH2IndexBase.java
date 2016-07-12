@@ -214,10 +214,10 @@ public abstract class GridH2IndexBase extends BaseIndex {
 
         if (qctx != null) {
             if (!tbl.isPartitioned()) {
-                if (qctx.queryType() == REPLICATED || qctx.queryType() == LOCAL)
+                if (tblFilter == null || qctx.queryType() == REPLICATED || qctx.queryType() == LOCAL)
                     return null;
 
-                if (tblFilter == null || tblFilter != tblFilter.getSelect().getTopFilters().get(0))
+                if (tblFilter != tblFilter.getSelect().getTopFilters().get(0))
                     return null;
             }
 
