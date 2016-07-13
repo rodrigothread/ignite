@@ -465,6 +465,23 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
 
     /** {@inheritDoc} */
     @Override public double getCost(Session ses, int[] masks, TableFilter[] filters, int filter, SortOrder sortOrder) {
+        TableFilter tblFilter = filters[filter];
+
+        if (false && tblFilter.getJoin() != null) {
+            GridH2Table tbl = (GridH2Table)tblFilter.getTable();
+
+            TableFilter join = tblFilter.getJoin();
+
+            if (!tbl.isPartitioned() && join.isJoinOuter() && join.getTable() instanceof GridH2Table) {
+                GridH2Table joinTbl = (GridH2Table)join.getTable();
+
+                if (joinTbl.isPartitioned())
+                    throw new CacheException("Outer join REPLICATED PARTITIONED table [replCache=" + tbl.spaceName() +
+                            ", partCache=" + joinTbl.spaceName() + ", sql=" + tblFilter.getSelect().getPlanSQL() + ']');
+            }
+        }
+
+
         long rowCnt = getRowCountApproximation();
         double baseCost = getCostRangeIndex(masks, rowCnt, filters, filter, sortOrder, false);
         int mul = getDistributedMultiplier(ses, filters, filter);

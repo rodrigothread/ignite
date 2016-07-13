@@ -17,9 +17,6 @@
 
 package org.apache.ignite.internal.processors.cache;
 
-import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.List;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
 import org.apache.ignite.cache.QueryEntity;
@@ -32,7 +29,14 @@ import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.spi.discovery.tcp.TcpDiscoverySpi;
 import org.apache.ignite.spi.discovery.tcp.ipfinder.TcpDiscoveryIpFinder;
 import org.apache.ignite.spi.discovery.tcp.ipfinder.vm.TcpDiscoveryVmIpFinder;
+import org.apache.ignite.testframework.GridTestUtils;
 import org.apache.ignite.testframework.junits.common.GridCommonAbstractTest;
+
+import javax.cache.CacheException;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
 
 import static org.apache.ignite.cache.CacheAtomicWriteOrderMode.PRIMARY;
 import static org.apache.ignite.cache.CacheAtomicityMode.ATOMIC;
@@ -100,6 +104,8 @@ public class IgniteCacheJoinPartitionedAndReplicatedTest extends GridCommonAbstr
 
         {
             CacheConfiguration ccfg = configuration(ORG_CACHE_REPLICATED);
+
+            ccfg.setCacheMode(REPLICATED);
 
             QueryEntity entity = new QueryEntity();
             entity.setKeyType(Integer.class.getName());
@@ -193,10 +199,6 @@ public class IgniteCacheJoinPartitionedAndReplicatedTest extends GridCommonAbstr
             checkQuery("select p.name from \"person\".Person p", personCache, 2);
 
         checkQuery("select o.name, p._key, p.name " +
-            "from \"person\".Person p left join \"org\".Organization o " +
-            "on (p.orgId = o.id)", orgCache, 2);
-
-        checkQuery("select o.name, p._key, p.name " +
             "from \"org\".Organization o left join \"person\".Person p " +
             "on (p.orgId = o.id)", orgCache, 2);
 
@@ -207,6 +209,30 @@ public class IgniteCacheJoinPartitionedAndReplicatedTest extends GridCommonAbstr
         checkQuery("select o.name, p._key, p.name " +
             "from \"orgRepl\".Organization o left join \"person\".Person p " +
             "on (p.orgId = o.id)", orgCacheRepl, 2);
+
+        checkQueryFails("select o.name, p._key, p.name " +
+                "from \"person\".Person p left join \"org\".Organization o " +
+                "on (p.orgId = o.id)", personCache);
+
+        checkQueryFails("select o.name, p._key, p.name " +
+                "from \"org\".Organization o right join \"person\".Person p " +
+                "on (p.orgId = o.id)", personCache);
+    }
+
+    /**
+     * @param sql SQL.
+     * @param cache Cache.
+     */
+    private void checkQueryFails(final String sql, final IgniteCache<Object, Object> cache) {
+        GridTestUtils.assertThrows(log, new Callable<Void>() {
+            @Override public Void call() throws Exception {
+                SqlFieldsQuery qry = new SqlFieldsQuery(sql);
+
+                cache.query(qry).getAll();
+
+                return null;
+            }
+        }, CacheException.class, null);
     }
 
     /**

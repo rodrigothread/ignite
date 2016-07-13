@@ -48,6 +48,9 @@ public final class GridH2CollocationModel {
     private static final int MULTIPLIER_BROADCAST = 200;
 
     /** */
+    private static final int MULTIPLIER_REPLICATED_NOT_LAST = 1000;
+
+    /** */
     private final GridH2CollocationModel upper;
 
     /** */
@@ -206,7 +209,7 @@ public final class GridH2CollocationModel {
                         if (m > maxMultiplier) {
                             maxMultiplier = m;
 
-                            if (maxMultiplier == MULTIPLIER_BROADCAST)
+                            if (maxMultiplier == MULTIPLIER_REPLICATED_NOT_LAST)
                                 break;
                         }
                     }
@@ -224,7 +227,7 @@ public final class GridH2CollocationModel {
             GridH2Table tbl = (GridH2Table)upper.childFilters[filter].getTable();
 
             // Backup filter is used for REPLICATED cache if this is first cache in query.
-            if (!tbl.isPartitioned() && filter != 0) {
+            if (!tbl.isPartitioned()) {
                 type = Type.REPLICATED;
                 multiplier = MULTIPLIER_COLLOCATED;
 
@@ -236,7 +239,7 @@ public final class GridH2CollocationModel {
             // to all the affinity nodes the "base" does not need to get remote results.
             if (!upper.findPartitionedTableBefore(filter)) {
                 type = Type.PARTITIONED_COLLOCATED;
-                multiplier = MULTIPLIER_COLLOCATED;
+                multiplier = upper.previousReplicated(filter) ? MULTIPLIER_REPLICATED_NOT_LAST : MULTIPLIER_COLLOCATED;
 
                 return;
             }
@@ -265,6 +268,9 @@ public final class GridH2CollocationModel {
                 default:
                     throw new IllegalStateException();
             }
+
+            if (upper.previousReplicated(filter))
+                multiplier = MULTIPLIER_REPLICATED_NOT_LAST;
         }
     }
 
@@ -284,6 +290,17 @@ public final class GridH2CollocationModel {
 
         // We have to search globally in upper queries as well.
         return upper != null && upper.findPartitionedTableBefore(filter);
+    }
+
+    /**
+     * @param f Current filter.
+     * @return {@code true} If previous table is REPLICATED.
+     */
+    private boolean previousReplicated(int f) {
+        if (f > 0 && child(f - 1, true).type(true) == Type.REPLICATED)
+            return true;
+
+        return upper != null && upper.previousReplicated(filter);
     }
 
     /**

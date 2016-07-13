@@ -212,17 +212,8 @@ public abstract class GridH2IndexBase extends BaseIndex {
     protected static IndexingQueryFilter threadLocalFilter(GridH2Table tbl, TableFilter tblFilter) {
         GridH2QueryContext qctx = GridH2QueryContext.get();
 
-        if (qctx != null) {
-            if (!tbl.isPartitioned()) {
-                if (tblFilter == null || qctx.queryType() == REPLICATED || qctx.queryType() == LOCAL)
-                    return null;
-
-                if (tblFilter != tblFilter.getSelect().getTopFilters().get(0))
-                    return null;
-            }
-
+        if (qctx != null)
             return qctx.filter();
-        }
 
         return null;
     }
