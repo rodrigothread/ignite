@@ -177,8 +177,6 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
      */
     public void testJoin() throws Exception {
         join(true);
-
-        join(false);
     }
 
     /**
@@ -229,7 +227,7 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
 
             checkQuery("select o.name, p._key, p.name, a.name " +
                 "from \"org\".Organization o, \"acc\".Account a, \"person\".Person p " +
-                "where p.orgId = o._key and p._key = a.personId", orgCache, true, 2);
+                "where p.orgId = o._key and p._key = a.personId", orgCache, false, 2);
 
             checkQuery("select o.name, p._key, p.name, a.name " +
                 "from \"person\".Person p, \"org\".Organization o, \"acc\".Account a " +
@@ -255,8 +253,6 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
                             append(cache2).append(", ").
                             append(cache3).append(" ").
                             append("where p.orgId = o._key and p._key = a.personId");
-
-                        checkQuery(qry.toString(), orgCache, true, 2);
 
                         checkQuery(qry.toString(), orgCache, false, 2);
                     }

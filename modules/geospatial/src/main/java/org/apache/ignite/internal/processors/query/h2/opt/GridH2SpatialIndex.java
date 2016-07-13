@@ -235,7 +235,20 @@ public class GridH2SpatialIndex extends GridH2IndexBase implements SpatialIndex 
     }
 
     /** {@inheritDoc} */
+    @Override public Cursor find(TableFilter filter, SearchRow first, SearchRow last) {
+        return find0(filter);
+    }
+
+    /** {@inheritDoc} */
     @Override public Cursor find(Session ses, SearchRow first, SearchRow last) {
+        return find0(null);
+    }
+
+    /**
+     * @param filter Table filter.
+     * @return Cursor.
+     */
+    private Cursor find0(TableFilter filter) {
         Lock l = lock.readLock();
 
         l.lock();
@@ -243,7 +256,7 @@ public class GridH2SpatialIndex extends GridH2IndexBase implements SpatialIndex 
         try {
             checkClosed();
 
-            return new GridH2Cursor(rowIterator(treeMap.keySet().iterator()));
+            return new GridH2Cursor(rowIterator(treeMap.keySet().iterator(), filter));
         }
         finally {
             l.unlock();
@@ -257,9 +270,10 @@ public class GridH2SpatialIndex extends GridH2IndexBase implements SpatialIndex 
 
     /**
      * @param i Spatial key iterator.
+     * @param filter Table filter.
      * @return Iterator over rows.
      */
-    private Iterator<GridH2Row> rowIterator(Iterator<SpatialKey> i) {
+    private Iterator<GridH2Row> rowIterator(Iterator<SpatialKey> i, TableFilter filter) {
         if (!i.hasNext())
             return Collections.emptyIterator();
 
@@ -274,7 +288,7 @@ public class GridH2SpatialIndex extends GridH2IndexBase implements SpatialIndex 
         }
         while (i.hasNext());
 
-        return filter(rows.iterator(), threadLocalFilter());
+        return filter(rows.iterator(), threadLocalFilter(getTable(), filter));
     }
 
     /** {@inheritDoc} */
@@ -289,7 +303,7 @@ public class GridH2SpatialIndex extends GridH2IndexBase implements SpatialIndex 
             if (!first)
                 throw DbException.throwInternalError("Spatial Index can only be fetch by ascending order");
 
-            Iterator<GridH2Row> iter = rowIterator(treeMap.keySet().iterator());
+            Iterator<GridH2Row> iter = rowIterator(treeMap.keySet().iterator(), null);
 
             return new SingleRowCursor(iter.hasNext() ? iter.next() : null);
         }
@@ -318,7 +332,7 @@ public class GridH2SpatialIndex extends GridH2IndexBase implements SpatialIndex 
             if (intersection == null)
                 return find(filter.getSession(), null, null);
 
-            return new GridH2Cursor(rowIterator(treeMap.findIntersectingKeys(getEnvelope(intersection, 0))));
+            return new GridH2Cursor(rowIterator(treeMap.findIntersectingKeys(getEnvelope(intersection, 0)), filter));
         }
         finally {
             l.unlock();

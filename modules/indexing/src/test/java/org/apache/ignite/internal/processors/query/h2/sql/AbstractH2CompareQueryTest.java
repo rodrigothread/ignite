@@ -416,8 +416,8 @@ public abstract class AbstractH2CompareQueryTest extends GridCommonAbstractTest 
 
                     assertTrue(iter2.hasNext());
 
-                    Map.Entry<String,Integer> e1 = iter1.next();
-                    Map.Entry<String,Integer> e2 = iter2.next();
+                    Map.Entry<String, Integer> e1 = iter1.next();
+                    Map.Entry<String, Integer> e2 = iter2.next();
 
                     assertEquals(e1.getKey(), e2.getKey());
                     assertEquals(e1.getValue(), e2.getValue());

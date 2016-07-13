@@ -29,6 +29,7 @@ import org.apache.ignite.IgniteCache;
 import org.apache.ignite.cache.CacheAtomicityMode;
 import org.apache.ignite.cache.CacheMode;
 import org.apache.ignite.cache.CachePeekMode;
+import org.apache.ignite.cache.affinity.AffinityKeyMapped;
 import org.apache.ignite.cache.query.SqlFieldsQuery;
 import org.apache.ignite.cache.query.annotations.QuerySqlField;
 import org.apache.ignite.configuration.CacheConfiguration;
@@ -263,6 +264,7 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
 
             X.println("Plan : " + plan);
 
+            assertEquals(2, StringUtils.countOccurrencesOf(plan, "batched"));
             assertEquals(2, StringUtils.countOccurrencesOf(plan, "batched:unicast"));
 
             assertEquals(2, c.query(new SqlFieldsQuery(select).setDistributedJoins(true)
@@ -276,6 +278,7 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
 
             X.println("Plan : " + plan);
 
+            assertEquals(2, StringUtils.countOccurrencesOf(plan, "batched"));
             assertEquals(2, StringUtils.countOccurrencesOf(plan, "batched:unicast"));
 
             assertEquals(2, c.query(new SqlFieldsQuery(select).setDistributedJoins(true)
@@ -283,6 +286,352 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
         }
         finally {
             c.destroy();
+        }
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    public void testDistributedJoinsUnionPartitionedReplicated() throws Exception {
+        CacheConfiguration ccfg1 = cacheConfig("pers", true,
+            Integer.class, Person2.class);
+        CacheConfiguration ccfg2 = cacheConfig("org", false,
+            Integer.class, Organization.class);
+
+        IgniteCache<Integer, Object> c1 = ignite(0).getOrCreateCache(ccfg1);
+        IgniteCache<Integer, Object> c2 = ignite(0).getOrCreateCache(ccfg2);
+
+        try {
+            c2.put(1, new Organization("o1"));
+            c2.put(2, new Organization("o2"));
+            c1.put(3, new Person2(1, "p1"));
+            c1.put(4, new Person2(2, "p2"));
+            c1.put(5, new Person2(3, "p3"));
+
+            String select0 = "select o.name n1, p.name n2 from \"pers\".Person2 p, \"org\".Organization o where p.orgId = o._key and o._key=1" +
+                " union select o.name n1, p.name n2 from \"org\".Organization o, \"pers\".Person2 p where p.orgId = o._key and o._key=2";
+
+            String plan = (String)c1.query(new SqlFieldsQuery("explain " + select0)
+                .setDistributedJoins(true).setEnforceJoinOrder(true))
+                .getAll().get(0).get(0);
+
+            X.println("Plan : " + plan);
+
+            assertEquals(1, StringUtils.countOccurrencesOf(plan, "batched"));
+            assertEquals(1, StringUtils.countOccurrencesOf(plan, "batched:broadcast"));
+            assertEquals(2, c1.query(new SqlFieldsQuery(select0).setDistributedJoins(true)
+                .setEnforceJoinOrder(true)).getAll().size());
+
+            String select = "select * from (" + select0 + ")";
+
+            plan = (String)c1.query(new SqlFieldsQuery("explain " + select)
+                .setDistributedJoins(true).setEnforceJoinOrder(true))
+                .getAll().get(0).get(0);
+
+            X.println("Plan : " + plan);
+
+            assertEquals(1, StringUtils.countOccurrencesOf(plan, "batched"));
+            assertEquals(1, StringUtils.countOccurrencesOf(plan, "batched:broadcast"));
+            assertEquals(2, c1.query(new SqlFieldsQuery(select).setDistributedJoins(true)
+                .setEnforceJoinOrder(true)).getAll().size());
+
+            String select1 = "select o.name n1, p.name n2 from \"pers\".Person2 p, \"org\".Organization o where p.orgId = o._key and o._key=1" +
+                " union select * from (select o.name n1, p.name n2 from \"org\".Organization o, \"pers\".Person2 p where p.orgId = o._key and o._key=2)";
+
+            plan = (String)c1.query(new SqlFieldsQuery("explain " + select1)
+                .setDistributedJoins(true).setEnforceJoinOrder(true))
+                .getAll().get(0).get(0);
+
+            X.println("Plan : " + plan);
+
+            assertEquals(1, StringUtils.countOccurrencesOf(plan, "batched"));
+            assertEquals(1, StringUtils.countOccurrencesOf(plan, "batched:broadcast"));
+            assertEquals(2, c1.query(new SqlFieldsQuery(select).setDistributedJoins(true)
+                .setEnforceJoinOrder(true)).getAll().size());
+
+            assertEquals(2, c1.query(new SqlFieldsQuery(select).setDistributedJoins(true)
+                .setEnforceJoinOrder(true)).getAll().size());
+
+            select = "select * from (" + select1 + ")";
+
+            plan = (String)c1.query(new SqlFieldsQuery("explain " + select)
+                .setDistributedJoins(true).setEnforceJoinOrder(true))
+                .getAll().get(0).get(0);
+
+            X.println("Plan : " + plan);
+
+            assertEquals(1, StringUtils.countOccurrencesOf(plan, "batched"));
+            assertEquals(1, StringUtils.countOccurrencesOf(plan, "batched:broadcast"));
+            assertEquals(2, c1.query(new SqlFieldsQuery(select).setDistributedJoins(true)
+                .setEnforceJoinOrder(true)).getAll().size());
+        }
+        finally {
+            c1.destroy();
+            c2.destroy();
+        }
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    public void testDistributedJoinsPlan() throws Exception {
+        List<IgniteCache<Object, Object>> caches = new ArrayList<>();
+
+        IgniteCache<Object, Object> persPart =
+            ignite(0).createCache(cacheConfig("persPart", true, Integer.class, Person2.class));
+        caches.add(persPart);
+
+        IgniteCache<Object, Object> persPartAff =
+            ignite(0).createCache(cacheConfig("persPartAff", true, TestKey.class, Person2.class));
+        caches.add(persPartAff);
+
+        IgniteCache<Object, Object> orgPart =
+            ignite(0).createCache(cacheConfig("orgPart", true, Integer.class, Organization.class));
+        caches.add(orgPart);
+
+        IgniteCache<Object, Object> orgPartAff =
+            ignite(0).createCache(cacheConfig("orgPartAff", true, TestKey.class, Organization.class));
+        caches.add(orgPartAff);
+
+        IgniteCache<Object, Object> orgRepl =
+            ignite(0).createCache(cacheConfig("orgRepl", false, Integer.class, Organization.class));
+        caches.add(orgRepl);
+
+        try {
+            // Join two partitioned.
+
+            checkQueryPlanContains(persPart,
+                true,
+                1,
+                "select p._key k1, o._key k2 " +
+                    "from \"persPart\".Person2 p, \"orgPart\".Organization o " +
+                    "where p.orgId = o._key",
+                "batched:unicast");
+
+            checkQueryPlanContains(persPart,
+                false,
+                1,
+                "select p._key k1, o._key k2 " +
+                    "from \"persPart\".Person2 p, \"orgPartAff\".Organization o " +
+                    "where p.orgId = o.affKey",
+                "batched:unicast");
+
+            checkQueryPlanContains(persPart,
+                false,
+                1,
+                "select p._key k1, o._key k2 " +
+                    "from \"persPart\".Person2 p, \"orgPart\".Organization o " +
+                    "where p.orgId = o._key",
+                "batched:unicast");
+
+            checkQueryPlanContains(persPart,
+                false,
+                1,
+                "select p._key k1, o._key k2 " +
+                    "from \"persPart\".Person2 p inner join \"orgPart\".Organization o " +
+                    "on p.orgId = o._key",
+                "batched:unicast");
+
+            checkQueryPlanContains(persPart,
+                false,
+                1,
+                "select p._key k1, o._key k2 " +
+                    "from \"persPart\".Person2 p left outer join \"orgPart\".Organization o " +
+                    "on p.orgId = o._key",
+                "batched:unicast");
+
+            checkQueryPlanContains(persPart,
+                true,
+                1,
+                "select p._key k1, o._key k2 " +
+                    "from \"orgPart\".Organization o, \"persPart\".Person2 p " +
+                    "where p.orgId = o._key",
+                "batched:broadcast");
+
+            checkQueryPlanContains(persPart,
+                true,
+                1,
+                "select p._key k1, o._key k2 " +
+                    "from \"orgPartAff\".Organization o, \"persPart\".Person2 p " +
+                    "where p.orgId = o.affKey",
+                "batched:broadcast");
+
+            // Join partitioned and replicated.
+
+            checkQueryPlanContains(persPart,
+                true,
+                0,
+                "select p._key k1, o._key k2 " +
+                    "from \"persPart\".Person2 p, \"orgRepl\".Organization o " +
+                    "where p.orgId = o._key");
+
+            checkQueryPlanContains(persPart,
+                false,
+                0,
+                "select p._key k1, o._key k2 " +
+                    "from \"persPart\".Person2 p, \"orgRepl\".Organization o " +
+                    "where p.orgId = o._key");
+
+            checkQueryPlanContains(persPart,
+                false,
+                0,
+                "select p._key k1, o._key k2 " +
+                    "from \"persPart\".Person2 p inner join \"orgRepl\".Organization o " +
+                    "on p.orgId = o._key");
+
+            checkQueryPlanContains(persPart,
+                false,
+                0,
+                "select p._key k1, o._key k2 " +
+                    "from \"persPart\".Person2 p left outer join \"orgRepl\".Organization o " +
+                    "on p.orgId = o._key");
+
+            checkQueryPlanContains(persPart,
+                true,
+                1,
+                "select p._key k1, o._key k2 " +
+                    "from \"orgRepl\".Organization o, \"persPart\".Person2 p " +
+                    "where p.orgId = o._key",
+                "batched:broadcast");
+
+            checkQueryPlanContains(persPart,
+                true,
+                1,
+                "select p._key k1, o._key k2 " +
+                    "from \"orgRepl\".Organization o inner join \"persPart\".Person2 p " +
+                    "on p.orgId = o._key",
+                "batched:broadcast");
+
+            checkQueryPlanContains(persPart,
+                true,
+                1,
+                "select p._key k1, o._key k2 " +
+                    "from \"orgRepl\".Organization o left outer join \"persPart\".Person2 p " +
+                    "on p.orgId = o._key",
+                "batched:broadcast");
+
+            // Join on affinity keys.
+
+            checkNoBatchedJoin(persPart, "select p._key k1, o._key k2 ",
+                "\"persPart\".Person2 p",
+                "\"orgPart\".Organization o",
+                "where p._key = o._key");
+
+            checkNoBatchedJoin(persPart, "select p._key k1, o._key k2 ",
+                "\"persPart\".Person2 p",
+                "\"orgRepl\".Organization o",
+                "where p._key = o._key");
+
+            checkNoBatchedJoin(persPartAff, "select p._key k1, o._key k2 ",
+                "\"persPartAff\".Person2 p",
+                "\"orgPart\".Organization o",
+                "where p.affKey = o._key");
+
+            checkNoBatchedJoin(persPartAff, "select p._key k1, o._key k2 ",
+                "\"persPartAff\".Person2 p",
+                "\"orgRepl\".Organization o",
+                "where p.affKey = o._key");
+        }
+        finally {
+            for (IgniteCache<Object, Object> cache : caches)
+                ignite(0).destroyCache(cache.getName());
+        }
+    }
+
+    /**
+     * @param cache Query cache.
+     * @param select Select clause.
+     * @param cache1 Cache name1.
+     * @param cache2 Cache name2.
+     * @param where Where clause.
+     */
+    private void checkNoBatchedJoin(IgniteCache<Object, Object> cache,
+        String select,
+        String cache1,
+        String cache2,
+        String where) {
+        checkQueryPlanContains(cache,
+            true,
+            0,
+            select +
+                "from " + cache1 + ","  + cache2 + " "+ where);
+        checkQueryPlanContains(cache,
+            false,
+            0,
+            select +
+                "from " + cache1 + ","  + cache2 + " "+ where);
+        checkQueryPlanContains(cache,
+            true,
+            0,
+            select +
+                "from " + cache2 + ","  + cache1 + " "+ where);
+        checkQueryPlanContains(cache,
+            false,
+            0,
+            select +
+                "from " + cache2 + ","  + cache1 + " "+ where);
+    }
+
+    /**
+     * @param cache Cache.
+     * @param enforceJoinOrder Enforce join order flag.
+     * @param expBatchedJoins Expected batched joins count.
+     * @param sql Query.
+     * @param expText Expected text to find in plan.
+     */
+    private void checkQueryPlanContains(IgniteCache<Object, Object> cache,
+        boolean enforceJoinOrder,
+        int expBatchedJoins,
+        String sql,
+        String...expText) {
+        checkQueryPlanContains(cache,
+            enforceJoinOrder,
+            expBatchedJoins,
+            new SqlFieldsQuery(sql),
+            expText);
+
+        checkQueryPlanContains(cache,
+            enforceJoinOrder,
+            expBatchedJoins,
+            new SqlFieldsQuery("select * from (" + sql + ")"),
+            expText);
+    }
+
+    /**
+     * @param cache Cache.
+     * @param enforceJoinOrder Enforce join order flag.
+     * @param expBatchedJoins Expected batched joins count.
+     * @param qry Query.
+     * @param expText Expected text to find in plan.
+     */
+    private void checkQueryPlanContains(IgniteCache<Object, Object> cache,
+        boolean enforceJoinOrder,
+        int expBatchedJoins,
+        SqlFieldsQuery qry,
+        String...expText) {
+        qry.setEnforceJoinOrder(enforceJoinOrder);
+        qry.setDistributedJoins(true);
+
+        String plan = queryPlan(cache, qry);
+
+        log.info("Plan: " + plan);
+
+        assertEquals("Unexpected number of batched joins in plan [plan=" + plan + ", qry=" + qry + ']',
+            expBatchedJoins,
+            StringUtils.countOccurrencesOf(plan, "batched"));
+
+        int startIdx = 0;
+
+        for (String exp : expText) {
+            int idx = exp.indexOf(exp, startIdx);
+
+            if (idx == -1) {
+                fail("Plan does not contain expected string [startIdx=" + startIdx +
+                    ", plan=" + plan +
+                    ", exp=" + exp + ']');
+            }
+
+            startIdx = idx + 1;
         }
     }
 
@@ -547,7 +896,7 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
      */
     private static class Person2 implements Serializable {
         /** */
-        @QuerySqlField
+        @QuerySqlField(index = true)
         int orgId;
 
         /** */
@@ -568,6 +917,48 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
         public Person2(int orgId, String name) {
             this.orgId = orgId;
             this.name = name;
+        }
+    }
+
+    /**
+     *
+     */
+    private static class TestKey implements Serializable {
+        /** */
+        @QuerySqlField(index = true)
+        @AffinityKeyMapped
+        int affKey;
+
+        /** */
+        @QuerySqlField()
+        int id;
+
+        /**
+         * @param affKey Affinity key.
+         * @param id ID.
+         */
+        public TestKey(int affKey, int id) {
+            this.affKey = affKey;
+            this.id = id;
+        }
+
+        /** {@inheritDoc} */
+        @Override public boolean equals(Object o) {
+            if (this == o)
+                return true;
+
+            if (o == null || getClass() != o.getClass())
+                return false;
+
+            TestKey personKey = (TestKey)o;
+
+            return id == personKey.id;
+
+        }
+
+        /** {@inheritDoc} */
+        @Override public int hashCode() {
+            return id;
         }
     }
 

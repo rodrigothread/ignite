@@ -503,6 +503,13 @@ public class GridH2QueryContext {
         return this;
     }
 
+    /**
+     * @return Query type.
+     */
+    public GridH2QueryType queryType() {
+        return key.type;
+    }
+
     /** {@inheritDoc} */
     @Override public String toString() {
         return S.toString(GridH2QueryContext.class, this);

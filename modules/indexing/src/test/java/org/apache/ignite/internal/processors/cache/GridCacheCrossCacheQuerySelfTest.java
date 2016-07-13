@@ -131,6 +131,7 @@ public class GridCacheCrossCacheQuerySelfTest extends GridCommonAbstractTest {
 
         SqlFieldsQuery qry = new SqlFieldsQuery("select f.productId, p.name, f.price " +
             "from FactPurchase f, \"replicated\".DimProduct p where p.id = f.productId ");
+        qry.setEnforceJoinOrder(true);
 
         for (List<?> o : qryProc.queryTwoStep(cache.context(), qry).getAll()) {
             X.println("___ -> " + o);
@@ -164,6 +165,7 @@ public class GridCacheCrossCacheQuerySelfTest extends GridCommonAbstractTest {
             "from FactPurchase f, \"replicated\".DimProduct p " +
             "where p.id = f.productId " +
             "group by f.productId, p.name");
+        qry.setEnforceJoinOrder(true);
 
         for (List<?> o : qryProc.queryTwoStep(cache.context(), qry).getAll()) {
             X.println("___ -> " + o);
@@ -181,6 +183,7 @@ public class GridCacheCrossCacheQuerySelfTest extends GridCommonAbstractTest {
             "where p.id = f.productId " +
             "group by f.productId, p.name " +
             "having s >= 15");
+        qry.setEnforceJoinOrder(true);
 
         for (List<?> o : qryProc.queryTwoStep(cache.context(), qry).getAll()) {
             X.println("___ -> " + o);

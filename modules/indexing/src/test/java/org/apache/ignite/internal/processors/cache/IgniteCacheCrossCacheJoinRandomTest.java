@@ -22,7 +22,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -63,10 +63,24 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
     private static final int OBJECTS = 200;
 
     /** */
-    private static final int CACHES = 5;
+    private static final int MAX_CACHES = 5;
 
     /** */
-    private Random rnd;
+    private static Random rnd;
+
+    /** */
+    private static List<Map<Integer, Integer>> cachesData;
+
+    /** */
+    private static final List<T2<CacheMode, Integer>> MODES_1 = F.asList(
+        new T2<>(REPLICATED, 0),
+        new T2<>(PARTITIONED, 0));
+
+    /** */
+    private static final List<T2<CacheMode, Integer>> MODES_2 = F.asList(
+        new T2<>(REPLICATED, 0),
+        new T2<>(PARTITIONED, 0),
+        new T2<>(PARTITIONED, 1));
 
     /** {@inheritDoc} */
     @Override protected void setIndexedTypes(CacheConfiguration<?, ?> cc, CacheMode mode) {
@@ -84,6 +98,11 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
     }
 
     /** {@inheritDoc} */
+    @Override protected long getTestTimeout() {
+        return 10 * 60_000;
+    }
+
+    /** {@inheritDoc} */
     @Override protected IgniteConfiguration getConfiguration(String gridName) throws Exception {
         IgniteConfiguration cfg = super.getConfiguration(gridName);
 
@@ -95,16 +114,6 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
 
         return cfg;
     }
-    /** {@inheritDoc} */
-    @Override protected void beforeTest() throws Exception {
-        super.beforeTest();
-
-        long seed = System.currentTimeMillis();
-
-        rnd = new Random(seed);
-
-        log.info("Random seed: " + seed);
-    }
 
     /** {@inheritDoc} */
     @Override protected void beforeTestsStarted() throws Exception {
@@ -113,11 +122,29 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
         client = true;
 
         startGrid(SRVS);
+
+        long seed = System.currentTimeMillis();
+
+        rnd = new Random(seed);
+
+        log.info("Random seed: " + seed);
+
+        cachesData = new ArrayList<>(MAX_CACHES);
+
+        for (int i = 0; i < MAX_CACHES; i++) {
+            Map<Integer, Integer> data = createData(OBJECTS * 2);
+
+            insertH2(data, i);
+
+            cachesData.add(data);
+        }
     }
 
     /** {@inheritDoc} */
     @Override protected void afterTestsStopped() throws Exception {
         stopAllGrids();
+
+        cachesData = null;
 
         super.afterTestsStopped();
     }
@@ -126,7 +153,7 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
     @Override protected Statement initializeH2Schema() throws SQLException {
         Statement st = super.initializeH2Schema();
 
-        for (int i = 0; i < CACHES; i++) {
+        for (int i = 0; i < MAX_CACHES; i++) {
             st.execute("CREATE SCHEMA \"cache" + i + "\"");
 
             st.execute("create table \"cache" + i + "\".TESTOBJECT" +
@@ -170,24 +197,38 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
     /**
      * @throws Exception If failed.
      */
-    public void testJoin() throws Exception {
-        List<Map<Integer, Integer>> cachesData = new ArrayList<>(CACHES);
+    public void testJoin2Caches() throws Exception {
+        testJoin(2, MODES_1);
+    }
 
-        for (int i = 0; i < CACHES; i++) {
-            Map<Integer, Integer> data = createData(OBJECTS / 2);
+    /**
+     * @throws Exception If failed.
+     */
+    public void testJoin3Caches() throws Exception {
+        testJoin(3, MODES_1);
+    }
 
-            insertH2(data, i);
+    /**
+     * @throws Exception If failed.
+     */
+    public void testJoin4Caches() throws Exception {
+        testJoin(4, MODES_1);
+    }
 
-            cachesData.add(data);
-        }
+    /**
+     * @throws Exception If failed.
+     */
+    public void testJoin5Caches() throws Exception {
+        testJoin(5, MODES_2);
+    }
 
-        List<T2<CacheMode, Integer>> allModes = F.asList(
-            new T2<>(REPLICATED, 0),
-            new T2<>(PARTITIONED, 1),
-            new T2<>(PARTITIONED, 2),
-            new T2<>(PARTITIONED, 3));
-
-        checkJoin(cachesData, allModes, new Stack<T2<CacheMode, Integer>>(), CACHES);
+    /**
+     * @param caches Number of caches.
+     * @param allModes Cache modes.
+     * @throws Exception If failed.
+     */
+    private void testJoin(int caches, List<T2<CacheMode, Integer>> allModes) throws Exception {
+        checkJoin(cachesData, allModes, new Stack<T2<CacheMode, Integer>>(), caches);
     }
 
     /**
@@ -214,7 +255,7 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
 
             log.info("Check configurations: " + modes);
 
-            checkJoin(ccfgs, cachesData);
+            checkJoinQueries(ccfgs, cachesData);
         }
         else {
             for (T2<CacheMode, Integer> mode : allModes) {
@@ -232,8 +273,10 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
      * @param cachesData Caches data.
      * @throws Exception If failed.
      */
-    private void checkJoin(List<CacheConfiguration> ccfgs, List<Map<Integer, Integer>> cachesData) throws Exception {
+    private void checkJoinQueries(List<CacheConfiguration> ccfgs, List<Map<Integer, Integer>> cachesData) throws Exception {
         Ignite client = ignite(SRVS);
+
+        final int CACHES = ccfgs.size();
 
         try {
             IgniteCache cache = null;
@@ -251,6 +294,7 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
 
             boolean distributedJoin = true;
 
+            // Do not use distributed join if all caches are REPLICATED.
             if (cache == null) {
                 cache = client.cache(ccfgs.get(0).getName());
 
@@ -259,12 +303,24 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
 
             Object[] args = {};
 
-            compareQueryRes0(cache, createQuery(CACHES, null), distributedJoin, true, args, Ordering.RANDOM);
+            compareQueryRes0(cache, createQuery(CACHES, false, null), distributedJoin, true, args, Ordering.RANDOM);
+
+            compareQueryRes0(cache, createQuery(CACHES, true, null), distributedJoin, true, args, Ordering.RANDOM);
 
             Map<Integer, Integer> data = cachesData.get(CACHES - 1);
 
-            for (Integer objId : data.keySet())
-                compareQueryRes0(cache, createQuery(CACHES, objId), distributedJoin, true, args, Ordering.RANDOM);
+            final int QRY_CNT = CACHES > 4 ? 2 : 50;
+
+            int cnt = 0;
+
+            for (Integer objId : data.keySet()) {
+                compareQueryRes0(cache, createQuery(CACHES, false, objId), distributedJoin, true, args, Ordering.RANDOM);
+
+                compareQueryRes0(cache, createQuery(CACHES, true, objId), distributedJoin, true, args, Ordering.RANDOM);
+
+                if (cnt++ == QRY_CNT)
+                    break;
+            }
         }
         finally {
             for (CacheConfiguration ccfg : ccfgs)
@@ -274,10 +330,12 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
 
     /**
      * @param caches Number of caches to join.
+     * @param outer If {@code true} creates outer join query, otherwise inner join.
      * @param objId Object ID.
      * @return SQL.
      */
-    private String createQuery(int caches, @Nullable Integer objId) {
+    @SuppressWarnings("StringConcatenationInsideStringBufferAppend")
+    private String createQuery(int caches, boolean outer, @Nullable Integer objId) {
         StringBuilder qry = new StringBuilder("select ");
 
         for (int i = 0; i < caches; i++) {
@@ -295,11 +353,11 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
             String cur = "o" + i;
             String prev = "o" + (i - 1);
 
-
-            qry.append("join \"" + cacheName + "\".TestObject " + cur);
+            qry.append(outer ? "left outer join " : "inner join ");
+            qry.append("\"" + cacheName + "\".TestObject " + cur);
 
             if (i == caches - 1 && objId != null)
-                qry.append(" on (" + prev + ".parentId=" + cur + "._key and " + prev + "._key=" + objId + ") ");
+                qry.append(" on (" + prev + ".parentId=" + cur + "._key and " + cur + "._key=" + objId + ") ");
             else
                 qry.append(" on (" + prev + ".parentId=" + cur + "._key) ");
         }
@@ -323,7 +381,7 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
      */
     private void insertH2(Map<Integer, Integer> data, int cache) throws Exception {
         for (Map.Entry<Integer, Integer> e : data.entrySet()) {
-            try(PreparedStatement st = conn.prepareStatement("insert into \"cache" + cache + "\".TESTOBJECT " +
+            try (PreparedStatement st = conn.prepareStatement("insert into \"cache" + cache + "\".TESTOBJECT " +
                 "(_key, _val, parentId) values(?, ?, ?)")) {
                 st.setObject(1, e.getKey());
                 st.setObject(2, new TestObject(e.getValue()));
@@ -339,12 +397,10 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
      * @return Generated data.
      */
     private Map<Integer, Integer> createData(int cnt) {
-        assert cnt <= OBJECTS : cnt;
-
-        Map<Integer, Integer> res = new HashMap<>();
+        Map<Integer, Integer> res = new LinkedHashMap<>();
 
         while (res.size() < cnt)
-            res.put(rnd.nextInt(OBJECTS), rnd.nextInt(OBJECTS));
+            res.put(rnd.nextInt(cnt), rnd.nextInt(OBJECTS + 1));
 
         return res;
     }

@@ -20,9 +20,12 @@ package org.apache.ignite.internal.processors.cache;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.cache.CacheException;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
+import org.apache.ignite.IgniteException;
 import org.apache.ignite.cache.QueryEntity;
 import org.apache.ignite.cache.affinity.Affinity;
 import org.apache.ignite.cache.query.QueryCursor;
@@ -35,6 +38,7 @@ import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.spi.discovery.tcp.TcpDiscoverySpi;
 import org.apache.ignite.spi.discovery.tcp.ipfinder.TcpDiscoveryIpFinder;
 import org.apache.ignite.spi.discovery.tcp.ipfinder.vm.TcpDiscoveryVmIpFinder;
+import org.apache.ignite.testframework.GridTestUtils;
 import org.apache.ignite.testframework.junits.common.GridCommonAbstractTest;
 
 import static org.apache.ignite.cache.CacheAtomicWriteOrderMode.PRIMARY;
@@ -44,7 +48,7 @@ import static org.apache.ignite.cache.CacheWriteSynchronizationMode.FULL_SYNC;
 /**
  *
  */
-public class IgniteCacheJoinNoIndexTest extends GridCommonAbstractTest {
+public class IgniteCacheDistributedJoinNoIndexTest extends GridCommonAbstractTest {
     /** */
     private static final TcpDiscoveryIpFinder IP_FINDER = new TcpDiscoveryVmIpFinder(true);
 
@@ -143,7 +147,7 @@ public class IgniteCacheJoinNoIndexTest extends GridCommonAbstractTest {
 
         Affinity<Object> aff = client.affinity(PERSON_CACHE);
 
-        IgniteCache<Object, Object> personCache = client.cache(PERSON_CACHE);
+        final IgniteCache<Object, Object> personCache = client.cache(PERSON_CACHE);
         IgniteCache<Object, Object> orgCache = client.cache(ORG_CACHE);
 
         AtomicInteger pKey = new AtomicInteger(100_000);
@@ -161,9 +165,19 @@ public class IgniteCacheJoinNoIndexTest extends GridCommonAbstractTest {
                 personCache.put(keyForNode(aff, pKey, node1), new Person(orgId, "org-" + i));
         }
 
-        checkQuery("select o.name, p._key, p.orgName " +
-            "from \"org\".Organization o, \"person\".Person p " +
-            "where p.orgName = o.name", personCache, false, 3);
+        GridTestUtils.assertThrows(log, new Callable<Void>() {
+            @Override public Void call() throws Exception {
+                SqlFieldsQuery qry = new SqlFieldsQuery("select o.name, p._key, p.orgName " +
+                    "from \"org\".Organization o, \"person\".Person p " +
+                    "where p.orgName = o.name");
+
+                qry.setDistributedJoins(true);
+
+                personCache.query(qry).getAll();
+
+                return null;
+            }
+        }, CacheException.class, null);
     }
     
     /**
