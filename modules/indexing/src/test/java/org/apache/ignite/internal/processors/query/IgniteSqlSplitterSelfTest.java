@@ -24,9 +24,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.cache.CacheException;
 import org.apache.ignite.IgniteCache;
 import org.apache.ignite.cache.CacheAtomicityMode;
+import org.apache.ignite.cache.CacheKeyConfiguration;
 import org.apache.ignite.cache.CacheMode;
 import org.apache.ignite.cache.CachePeekMode;
 import org.apache.ignite.cache.affinity.AffinityKeyMapped;
@@ -40,6 +43,7 @@ import org.apache.ignite.internal.util.typedef.X;
 import org.apache.ignite.spi.discovery.tcp.TcpDiscoverySpi;
 import org.apache.ignite.spi.discovery.tcp.ipfinder.TcpDiscoveryIpFinder;
 import org.apache.ignite.spi.discovery.tcp.ipfinder.vm.TcpDiscoveryVmIpFinder;
+import org.apache.ignite.testframework.GridTestUtils;
 import org.apache.ignite.testframework.junits.common.GridCommonAbstractTest;
 import org.springframework.util.StringUtils;
 
@@ -54,6 +58,10 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
     /** {@inheritDoc} */
     @Override protected IgniteConfiguration getConfiguration(String gridName) throws Exception {
         IgniteConfiguration cfg = super.getConfiguration(gridName);
+
+        CacheKeyConfiguration keyCfg = new CacheKeyConfiguration(TestKey.class.getName(), "affKey");
+
+        cfg.setCacheKeyConfiguration(keyCfg);
 
         cfg.setPeerClassLoadingEnabled(false);
 
@@ -633,6 +641,75 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
             for (IgniteCache<Object, Object> cache : caches)
                 ignite(0).destroyCache(cache.getName());
         }
+    }
+    /**
+     * @throws Exception If failed.
+     */
+    public void testDistributedJoinsEnforceReplicatedNotLast() throws Exception {
+        List<IgniteCache<Object, Object>> caches = new ArrayList<>();
+
+        IgniteCache<Object, Object> persPart =
+            ignite(0).createCache(cacheConfig("persPart", true, Integer.class, Person2.class));
+        caches.add(persPart);
+
+        IgniteCache<Object, Object> persPartAff =
+            ignite(0).createCache(cacheConfig("persPartAff", true, TestKey.class, Person2.class));
+        caches.add(persPartAff);
+
+        IgniteCache<Object, Object> orgRepl =
+            ignite(0).createCache(cacheConfig("orgRepl", false, Integer.class, Organization.class));
+        caches.add(orgRepl);
+
+        try {
+            checkQueryFails(persPart, "select p1._key k1, p2._key k2, o._key k3 " +
+                "from \"orgRepl\".Organization o, \"persPartAff\".Person2 p1, \"persPart\".Person2 p2 " +
+                "where p1._key=p2._key and p2.orgId = o._key", true);
+
+            checkQueryFails(persPart, "select p1._key k1, p2._key k2, o._key k3 " +
+                "from \"persPartAff\".Person2 p1, \"orgRepl\".Organization o, \"persPart\".Person2 p2 " +
+                "where p1._key=p2._key and p2.orgId = o._key", true);
+
+            checkQueryFails(persPart, "select p1._key k1, p2._key k2, o._key k3 " +
+                "from \"persPartAff\".Person2 p1, (select * from \"orgRepl\".Organization) o, \"persPart\".Person2 p2 " +
+                "where p1._key=p2._key and p2.orgId = o._key", true);
+
+            checkQueryPlanContains(persPart,
+                true,
+                0,
+                "select p._key k1, o._key k2 from \"orgRepl\".Organization o, \"persPart\".Person2 p");
+
+            checkQueryPlanContains(persPart,
+                true,
+                0,
+                "select p._key k1, o._key k2 from \"orgRepl\".Organization o, \"persPart\".Person2 p union " +
+                    "select p._key k1, o._key k2 from \"persPart\".Person2 p, \"orgRepl\".Organization o");
+        }
+        finally {
+            for (IgniteCache<Object, Object> cache : caches)
+                ignite(0).destroyCache(cache.getName());
+        }
+    }
+
+    /**
+     * @param cache Cache.
+     * @param sql SQL.
+     * @param enforceJoinOrder Enforce join order flag.
+     */
+    private void checkQueryFails(final IgniteCache<Object, Object> cache,
+        String sql,
+        boolean enforceJoinOrder) {
+        final SqlFieldsQuery qry = new SqlFieldsQuery(sql);
+
+        qry.setDistributedJoins(true);
+        qry.setEnforceJoinOrder(enforceJoinOrder);
+
+        GridTestUtils.assertThrows(log, new Callable<Void>() {
+            @Override public Void call() throws Exception {
+                cache.query(qry);
+
+                return null;
+            }
+        }, CacheException.class, null);
     }
 
     /**

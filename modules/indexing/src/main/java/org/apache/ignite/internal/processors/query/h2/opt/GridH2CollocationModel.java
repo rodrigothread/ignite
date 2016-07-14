@@ -20,6 +20,7 @@ package org.apache.ignite.internal.processors.query.h2.opt;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import javax.cache.CacheException;
 import org.h2.command.dml.Query;
 import org.h2.command.dml.Select;
 import org.h2.command.dml.SelectUnion;
@@ -77,15 +78,19 @@ public final class GridH2CollocationModel {
     /** */
     private Select select;
 
+    /** */
+    private final boolean validate;
+
     /**
      * @param upper Upper.
      * @param filter Filter.
      * @param view This model will be a subquery (or top level query) and must contain child filters.
      */
-    private GridH2CollocationModel(GridH2CollocationModel upper, int filter, boolean view) {
+    private GridH2CollocationModel(GridH2CollocationModel upper, int filter, boolean view, boolean validate) {
         this.upper = upper;
         this.filter = filter;
         this.view = view;
+        this.validate = validate;
     }
 
     /**
@@ -95,9 +100,12 @@ public final class GridH2CollocationModel {
      * @param view This model will be a subquery (or top level query) and must contain child filters.
      * @return Created child collocation model.
      */
-    private static GridH2CollocationModel createChildModel(GridH2CollocationModel upper, int filter,
-        List<GridH2CollocationModel> unions, boolean view) {
-        GridH2CollocationModel child = new GridH2CollocationModel(upper, filter, view);
+    private static GridH2CollocationModel createChildModel(GridH2CollocationModel upper,
+        int filter,
+        List<GridH2CollocationModel> unions,
+        boolean view,
+        boolean validate) {
+        GridH2CollocationModel child = new GridH2CollocationModel(upper, filter, view, validate);
 
         if (unions != null) {
             // Bind created child to unions.
@@ -197,6 +205,9 @@ public final class GridH2CollocationModel {
                 GridH2CollocationModel child = child(i, true);
 
                 Type t = child.type(true);
+
+                if (child.multiplier == MULTIPLIER_REPLICATED_NOT_LAST)
+                    maxMultiplier = child.multiplier;
 
                 if (t.isPartitioned()) {
                     partitioned = true;
@@ -496,13 +507,13 @@ public final class GridH2CollocationModel {
             if (f.getTable().isView()) {
                 if (f.getIndex() == null) {
                     // If we don't have view index yet, then we just creating empty model and it must be filled later.
-                    child = createChildModel(this, i, null, true);
+                    child = createChildModel(this, i, null, true, validate);
                 }
                 else
-                    child = buildCollocationModel(this, i, getSubQuery(f), null);
+                    child = buildCollocationModel(this, i, getSubQuery(f), null, validate);
             }
             else
-                child = createChildModel(this, i, null, false);
+                child = createChildModel(this, i, null, false, validate);
 
             assert child != null;
             assert children[i] == child;
@@ -540,19 +551,19 @@ public final class GridH2CollocationModel {
      * @return Collocation.
      */
     public static GridH2CollocationModel buildCollocationModel(GridH2QueryContext qctx, SubQueryInfo info,
-        TableFilter[] filters, int filter) {
+        TableFilter[] filters, int filter, boolean validate) {
         GridH2CollocationModel cm;
 
         if (info != null) {
             // Go up until we reach the root query.
-            cm = buildCollocationModel(qctx, info.getUpper(), info.getFilters(), info.getFilter());
+            cm = buildCollocationModel(qctx, info.getUpper(), info.getFilters(), info.getFilter(), validate);
         }
         else {
             // We are at the root query.
             cm = qctx.queryCollocationModel();
 
             if (cm == null) {
-                cm = createChildModel(null, -1, null, true);
+                cm = createChildModel(null, -1, null, true, validate);
 
                 qctx.queryCollocationModel(cm);
             }
@@ -581,7 +592,7 @@ public final class GridH2CollocationModel {
 
             // Nothing was found, need to create new child in union.
             if (cm.select != select)
-                cm = createChildModel(cm.upper, cm.filter, unions, true);
+                cm = createChildModel(cm.upper, cm.filter, unions, true, validate);
         }
 
         cm.childFilters(filters);
@@ -594,9 +605,13 @@ public final class GridH2CollocationModel {
      * @return {@code true} If the query is collocated.
      */
     public static boolean isCollocated(Query qry) {
-        GridH2CollocationModel mdl = buildCollocationModel(null, -1, qry, null);
+        GridH2CollocationModel mdl = buildCollocationModel(null, -1, qry, null, true);
 
         Type type = mdl.type(true);
+
+        if (!type.isCollocated() && mdl.multiplier == MULTIPLIER_REPLICATED_NOT_LAST)
+            throw new CacheException("Failed to execute query: for distributed join, " +
+                "all REPLICATED caches must be at the end of the joined tables list.");
 
         return type.isCollocated();
     }
@@ -609,15 +624,15 @@ public final class GridH2CollocationModel {
      * @return Built model.
      */
     private static GridH2CollocationModel buildCollocationModel(GridH2CollocationModel upper, int filter, Query qry,
-        List<GridH2CollocationModel> unions) {
+        List<GridH2CollocationModel> unions, boolean validate) {
         if (qry.isUnion()) {
             if (unions == null)
                 unions = new ArrayList<>();
 
             SelectUnion union = (SelectUnion)qry;
 
-            GridH2CollocationModel left = buildCollocationModel(upper, filter, union.getLeft(), unions);
-            GridH2CollocationModel right = buildCollocationModel(upper, filter, union.getRight(), unions);
+            GridH2CollocationModel left = buildCollocationModel(upper, filter, union.getLeft(), unions, validate);
+            GridH2CollocationModel right = buildCollocationModel(upper, filter, union.getRight(), unions, validate);
 
             assert left != null;
             assert right != null;
@@ -634,7 +649,7 @@ public final class GridH2CollocationModel {
 
         TableFilter[] filters = list.toArray(new TableFilter[list.size()]);
 
-        GridH2CollocationModel cm = createChildModel(upper, filter, unions, true);
+        GridH2CollocationModel cm = createChildModel(upper, filter, unions, true, validate);
 
         cm.childFilters(filters);
 
@@ -642,9 +657,9 @@ public final class GridH2CollocationModel {
             TableFilter f = filters[i];
 
             if (f.getTable().isView())
-                buildCollocationModel(cm, i, getSubQuery(f), null);
+                buildCollocationModel(cm, i, getSubQuery(f), null, validate);
             else if (f.getTable() instanceof GridH2Table)
-                createChildModel(cm, i, null, false);
+                createChildModel(cm, i, null, false, validate);
         }
 
         return upper != null ? upper : cm;

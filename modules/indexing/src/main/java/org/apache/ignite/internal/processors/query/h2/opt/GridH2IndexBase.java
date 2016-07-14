@@ -151,7 +151,7 @@ public abstract class GridH2IndexBase extends BaseIndex {
 
         assert filters != null;
 
-        GridH2CollocationModel c = buildCollocationModel(qctx, ses.getSubQueryInfo(), filters, filter);
+        GridH2CollocationModel c = buildCollocationModel(qctx, ses.getSubQueryInfo(), filters, filter, false);
 
         return c.calculateMultiplier();
     }

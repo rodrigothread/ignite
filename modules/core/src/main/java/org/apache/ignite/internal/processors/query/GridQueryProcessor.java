@@ -1664,7 +1664,7 @@ public class GridQueryProcessor extends GridProcessorAdapter {
             res = clo.apply();
 
             if (res instanceof CacheQueryFuture) {
-                CacheQueryFuture fut = (CacheQueryFuture) res;
+                CacheQueryFuture fut = (CacheQueryFuture)res;
 
                 err = fut.error();
             }
@@ -1675,6 +1675,11 @@ public class GridQueryProcessor extends GridProcessorAdapter {
             err = e.unwrap();
 
             throw (IgniteCheckedException)err;
+        }
+        catch (CacheException e) {
+            err = e;
+
+            throw e;
         }
         catch (Exception e) {
             err = e;

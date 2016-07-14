@@ -213,14 +213,14 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
     /**
      * @throws Exception If failed.
      */
-    public void testJoin4Caches() throws Exception {
+    public void _testJoin4Caches() throws Exception {
         testJoin(4, MODES_1);
     }
 
     /**
      * @throws Exception If failed.
      */
-    public void testJoin5Caches() throws Exception {
+    public void _testJoin5Caches() throws Exception {
         testJoin(5, MODES_2);
     }
 
