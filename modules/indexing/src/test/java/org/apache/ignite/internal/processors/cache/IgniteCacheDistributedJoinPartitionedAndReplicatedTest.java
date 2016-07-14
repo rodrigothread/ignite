@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
+import org.apache.ignite.cache.CacheMode;
 import org.apache.ignite.cache.QueryEntity;
 import org.apache.ignite.cache.QueryIndex;
 import org.apache.ignite.cache.affinity.Affinity;
@@ -40,6 +41,7 @@ import org.apache.ignite.testframework.junits.common.GridCommonAbstractTest;
 
 import static org.apache.ignite.cache.CacheAtomicWriteOrderMode.PRIMARY;
 import static org.apache.ignite.cache.CacheAtomicityMode.ATOMIC;
+import static org.apache.ignite.cache.CacheMode.PARTITIONED;
 import static org.apache.ignite.cache.CacheMode.REPLICATED;
 import static org.apache.ignite.cache.CacheWriteSynchronizationMode.FULL_SYNC;
 
@@ -77,28 +79,38 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
 
     /**
      * @param name Cache name.
+     * @param cacheMode Cache mode.
      * @return Cache configuration.
      */
-    private CacheConfiguration configuration(String name) {
+    private CacheConfiguration configuration(String name, CacheMode cacheMode) {
         CacheConfiguration ccfg = new CacheConfiguration();
 
         ccfg.setName(name);
         ccfg.setWriteSynchronizationMode(FULL_SYNC);
         ccfg.setAtomicWriteOrderMode(PRIMARY);
         ccfg.setAtomicityMode(ATOMIC);
-        ccfg.setBackups(1);
+        ccfg.setCacheMode(cacheMode);
+        if (cacheMode == PARTITIONED)
+            ccfg.setBackups(1);
 
         return ccfg;
     }
 
-    private List<CacheConfiguration> caches(boolean idx) {
+    /**
+     * @param idx Use index flag.
+     * @param persCacheMode Person cache mode.
+     * @param orgCacheMode Organization cache mode.
+     * @param accCacheMode Account cache mode.
+     * @return Configurations.
+     */
+    private List<CacheConfiguration> caches(boolean idx,
+        CacheMode persCacheMode,
+        CacheMode orgCacheMode,
+        CacheMode accCacheMode) {
         List<CacheConfiguration> ccfgs = new ArrayList<>();
 
         {
-            CacheConfiguration ccfg = configuration(PERSON_CACHE);
-
-            // One cache is replicated.
-            ccfg.setCacheMode(REPLICATED);
+            CacheConfiguration ccfg = configuration(PERSON_CACHE, persCacheMode);
 
             QueryEntity entity = new QueryEntity();
             entity.setKeyType(Integer.class.getName());
@@ -115,7 +127,7 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
         }
 
         {
-            CacheConfiguration ccfg = configuration(ORG_CACHE);
+            CacheConfiguration ccfg = configuration(ORG_CACHE, orgCacheMode);
 
             QueryEntity entity = new QueryEntity();
             entity.setKeyType(Integer.class.getName());
@@ -131,7 +143,7 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
         }
 
         {
-            CacheConfiguration ccfg = configuration(ACCOUNT_CACHE);
+            CacheConfiguration ccfg = configuration(ACCOUNT_CACHE, accCacheMode);
 
             QueryEntity entity = new QueryEntity();
             entity.setKeyType(Integer.class.getName());
@@ -175,18 +187,36 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
     /**
      * @throws Exception If failed.
      */
-    public void testJoin() throws Exception {
-        join(true);
+    public void testJoin1() throws Exception {
+        join(true, REPLICATED, PARTITIONED, PARTITIONED);
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    public void testJoin2() throws Exception {
+        join(true, PARTITIONED, REPLICATED, PARTITIONED);
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    public void testJoin3() throws Exception {
+        join(true, PARTITIONED, PARTITIONED, REPLICATED);
     }
 
     /**
      * @param idx Use index flag.
+     * @param persCacheMode Person cache mode.
+     * @param orgCacheMode Organization cache mode.
+     * @param accCacheMode Account cache mode.
      * @throws Exception If failed.
      */
-    private void join(boolean idx) throws Exception {
+    private void join(boolean idx, CacheMode persCacheMode, CacheMode orgCacheMode, CacheMode accCacheMode)
+        throws Exception {
         Ignite client = grid(2);
 
-        for (CacheConfiguration ccfg : caches(idx))
+        for (CacheConfiguration ccfg : caches(idx, persCacheMode, orgCacheMode, accCacheMode))
             client.createCache(ccfg);
 
         try {
@@ -217,21 +247,31 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
             accCache.put(keyForNode(aff, accKey, node0), new Account(pid, orgId1, "a0"));
             accCache.put(keyForNode(aff, accKey, node1), new Account(pid, orgId1, "a1"));
 
+            IgniteCache<Object, Object> qryCache = replicated(orgCache) ? personCache : orgCache;
+
             checkQuery("select p._key, p.name, a.name " +
                 "from \"person\".Person p, \"acc\".Account a " +
-                "where p._key = a.personId", orgCache, true, 2);
+                "where p._key = a.personId", qryCache, false, 2);
 
             checkQuery("select o.name, p._key, p.name, a.name " +
                 "from \"org\".Organization o, \"person\".Person p, \"acc\".Account a " +
-                "where p.orgId = o._key and p._key = a.personId", orgCache, true, 2);
+                "where p.orgId = o._key and p._key = a.personId", qryCache, false, 2);
 
             checkQuery("select o.name, p._key, p.name, a.name " +
                 "from \"org\".Organization o, \"acc\".Account a, \"person\".Person p " +
-                "where p.orgId = o._key and p._key = a.personId", orgCache, false, 2);
+                "where p.orgId = o._key and p._key = a.personId", qryCache, false, 2);
 
             checkQuery("select o.name, p._key, p.name, a.name " +
                 "from \"person\".Person p, \"org\".Organization o, \"acc\".Account a " +
-                "where p.orgId = o._key and p._key = a.personId", orgCache, true, 2);
+                "where p.orgId = o._key and p._key = a.personId", qryCache, false, 2);
+
+            checkQuery("select * from (select o.name n1, p._key, p.name n2, a.name n3 " +
+                "from \"acc\".Account a, \"person\".Person p, \"org\".Organization o " +
+                "where p.orgId = o._key and p._key = a.personId)", qryCache, false, 2);
+
+            checkQuery("select * from (select o.name n1, p._key, p.name n2, a.name n3 " +
+                "from \"person\".Person p, \"acc\".Account a, \"org\".Organization o " +
+                "where p.orgId = o._key and p._key = a.personId)", qryCache, false, 2);
 
             String[] cacheNames = {"\"org\".Organization o", "\"person\".Person p", "\"acc\".Account a"};
 
@@ -254,7 +294,7 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
                             append(cache3).append(" ").
                             append("where p.orgId = o._key and p._key = a.personId");
 
-                        checkQuery(qry.toString(), orgCache, false, 2);
+                        checkQuery(qry.toString(), qryCache, false, 2);
                     }
                 }
             }
@@ -299,6 +339,14 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
             log.info("Results: " + res);
 
         assertEquals(expSize, res.size());
+    }
+
+    /**
+     * @param cache Cache.
+     * @return {@code True} if cache is replicated.
+     */
+    private boolean replicated(IgniteCache<?, ?> cache) {
+        return cache.getConfiguration(CacheConfiguration.class).getCacheMode() == REPLICATED;
     }
 
     /**

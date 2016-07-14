@@ -145,14 +145,14 @@ public class GridSqlQuerySplitter {
     /**
      * @param stmt Prepared statement.
      * @param params Parameters.
-     * @param collocatedGroupBy Whether the query has collocated GROUP BY keys.
+     * @param collocatedGrpBy Whether the query has collocated GROUP BY keys.
      * @param distributedJoins If distributed joins enabled.
      * @return Two step query.
      */
     public static GridCacheTwoStepQuery split(
         JdbcPreparedStatement stmt,
         Object[] params,
-        final boolean collocatedGroupBy,
+        final boolean collocatedGrpBy,
         final boolean distributedJoins
     ) {
         if (params == null)
@@ -175,7 +175,7 @@ public class GridSqlQuerySplitter {
         // nullifying or updating things, have to make sure that we will not need them in the original form later.
         final GridSqlSelect mapQry = wrapUnion(qry);
 
-        GridCacheSqlQuery rdc = split(res, 0, mapQry, params, collocatedGroupBy);
+        GridCacheSqlQuery rdc = split(res, 0, mapQry, params, collocatedGrpBy);
 
         res.reduceQuery(rdc);
 

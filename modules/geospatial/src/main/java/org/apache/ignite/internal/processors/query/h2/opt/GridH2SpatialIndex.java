@@ -288,7 +288,7 @@ public class GridH2SpatialIndex extends GridH2IndexBase implements SpatialIndex 
         }
         while (i.hasNext());
 
-        return filter(rows.iterator(), threadLocalFilter(getTable(), filter));
+        return filter(rows.iterator(), threadLocalFilter());
     }
 
     /** {@inheritDoc} */

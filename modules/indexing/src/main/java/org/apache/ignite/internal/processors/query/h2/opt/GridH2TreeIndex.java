@@ -413,7 +413,7 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
 
     /** {@inheritDoc} */
     @Override public long getRowCount(@Nullable Session ses) {
-        IndexingQueryFilter f = threadLocalFilter(getTable(), null);
+        IndexingQueryFilter f = threadLocalFilter();
 
         // Fast path if we don't need to perform any filtering.
         if (f == null || f.forSpace((getTable()).spaceName()) == null)
@@ -551,7 +551,7 @@ public class GridH2TreeIndex extends GridH2IndexBase implements Comparator<GridS
         TableFilter filter) {
         ConcurrentNavigableMap<GridSearchRowPointer, GridH2Row> t = treeForRead();
 
-        return doFind0(t, first, includeFirst, last, threadLocalFilter(getTable(), filter));
+        return doFind0(t, first, includeFirst, last, threadLocalFilter());
     }
 
     /**

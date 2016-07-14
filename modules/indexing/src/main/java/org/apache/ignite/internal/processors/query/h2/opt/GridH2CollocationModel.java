@@ -226,7 +226,7 @@ public final class GridH2CollocationModel {
             // We are at table instance.
             GridH2Table tbl = (GridH2Table)upper.childFilters[filter].getTable();
 
-            // Backup filter is used for REPLICATED cache if this is first cache in query.
+            // Only partitioned tables will do distributed joins.
             if (!tbl.isPartitioned()) {
                 type = Type.REPLICATED;
                 multiplier = MULTIPLIER_COLLOCATED;
@@ -239,34 +239,33 @@ public final class GridH2CollocationModel {
             // to all the affinity nodes the "base" does not need to get remote results.
             if (!upper.findPartitionedTableBefore(filter)) {
                 type = Type.PARTITIONED_COLLOCATED;
-                multiplier = upper.previousReplicated(filter) ? MULTIPLIER_REPLICATED_NOT_LAST : MULTIPLIER_COLLOCATED;
-
-                return;
+                multiplier = MULTIPLIER_COLLOCATED;
             }
+            else {
+                // It is enough to make sure that our previous join by affinity key is collocated, then we are
+                // collocated. If we at least have affinity key condition, then we do unicast which is cheaper.
+                switch (upper.joinedWithCollocated(filter)) {
+                    case JOINED_WITH_COLLOCATED:
+                        type = Type.PARTITIONED_COLLOCATED;
+                        multiplier = MULTIPLIER_COLLOCATED;
 
-            // It is enough to make sure that our previous join by affinity key is collocated, then we are
-            // collocated. If we at least have affinity key condition, then we do unicast which is cheaper.
-            switch (upper.joinedWithCollocated(filter)) {
-                case JOINED_WITH_COLLOCATED:
-                    type = Type.PARTITIONED_COLLOCATED;
-                    multiplier = MULTIPLIER_COLLOCATED;
+                        break;
 
-                    break;
+                    case HAS_AFFINITY_CONDITION:
+                        type = Type.PARTITIONED_NOT_COLLOCATED;
+                        multiplier = MULTIPLIER_UNICAST;
 
-                case HAS_AFFINITY_CONDITION:
-                    type = Type.PARTITIONED_NOT_COLLOCATED;
-                    multiplier = MULTIPLIER_UNICAST;
+                        break;
 
-                    break;
+                    case NONE:
+                        type = Type.PARTITIONED_NOT_COLLOCATED;
+                        multiplier = MULTIPLIER_BROADCAST;
 
-                case NONE:
-                    type = Type.PARTITIONED_NOT_COLLOCATED;
-                    multiplier = MULTIPLIER_BROADCAST;
+                        break;
 
-                    break;
-
-                default:
-                    throw new IllegalStateException();
+                    default:
+                        throw new IllegalStateException();
+                }
             }
 
             if (upper.previousReplicated(filter))

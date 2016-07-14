@@ -74,7 +74,9 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
     /** */
     private static final List<T2<CacheMode, Integer>> MODES_1 = F.asList(
         new T2<>(REPLICATED, 0),
-        new T2<>(PARTITIONED, 0));
+        new T2<>(PARTITIONED, 0),
+        new T2<>(PARTITIONED, 1),
+        new T2<>(PARTITIONED, 2));
 
     /** */
     private static final List<T2<CacheMode, Integer>> MODES_2 = F.asList(
@@ -281,10 +283,15 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
         try {
             IgniteCache cache = null;
 
+            boolean hasReplicated = false;
+
             for (int i = 0; i < CACHES; i++) {
                 CacheConfiguration ccfg = ccfgs.get(i);
 
                 IgniteCache cache0 = client.createCache(ccfg);
+
+                if (ccfg.getCacheMode() == REPLICATED)
+                    hasReplicated = true;
 
                 if (cache == null && ccfg.getCacheMode() == PARTITIONED)
                     cache = cache0;
@@ -303,9 +310,13 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
 
             Object[] args = {};
 
-            compareQueryRes0(cache, createQuery(CACHES, false, null), distributedJoin, true, args, Ordering.RANDOM);
+            compareQueryRes0(cache, createQuery(CACHES, false, null), distributedJoin, false, args, Ordering.RANDOM);
 
-            compareQueryRes0(cache, createQuery(CACHES, true, null), distributedJoin, true, args, Ordering.RANDOM);
+            if (!hasReplicated) {
+                compareQueryRes0(cache, createQuery(CACHES, false, null), distributedJoin, true, args, Ordering.RANDOM);
+
+                compareQueryRes0(cache, createQuery(CACHES, true, null), distributedJoin, true, args, Ordering.RANDOM);
+            }
 
             Map<Integer, Integer> data = cachesData.get(CACHES - 1);
 
@@ -314,9 +325,13 @@ public class IgniteCacheCrossCacheJoinRandomTest extends AbstractH2CompareQueryT
             int cnt = 0;
 
             for (Integer objId : data.keySet()) {
-                compareQueryRes0(cache, createQuery(CACHES, false, objId), distributedJoin, true, args, Ordering.RANDOM);
+                compareQueryRes0(cache, createQuery(CACHES, false, objId), distributedJoin, false, args, Ordering.RANDOM);
 
-                compareQueryRes0(cache, createQuery(CACHES, true, objId), distributedJoin, true, args, Ordering.RANDOM);
+                if (!hasReplicated) {
+                    compareQueryRes0(cache, createQuery(CACHES, false, objId), distributedJoin, true, args, Ordering.RANDOM);
+
+                    compareQueryRes0(cache, createQuery(CACHES, true, objId), distributedJoin, true, args, Ordering.RANDOM);
+                }
 
                 if (cnt++ == QRY_CNT)
                     break;

@@ -205,17 +205,12 @@ public abstract class GridH2IndexBase extends BaseIndex {
     }
 
     /**
-     * @param tbl Table.
-     * @param tblFilter Table filter.
      * @return Filter for currently running query or {@code null} if none.
      */
-    protected static IndexingQueryFilter threadLocalFilter(GridH2Table tbl, TableFilter tblFilter) {
+    protected static IndexingQueryFilter threadLocalFilter() {
         GridH2QueryContext qctx = GridH2QueryContext.get();
 
-        if (qctx != null)
-            return qctx.filter();
-
-        return null;
+        return qctx != null ? qctx.filter() : null;
     }
 
     /** {@inheritDoc} */

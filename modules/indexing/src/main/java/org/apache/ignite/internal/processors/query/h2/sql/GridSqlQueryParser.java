@@ -50,6 +50,8 @@ import org.h2.expression.Parameter;
 import org.h2.expression.Subquery;
 import org.h2.expression.TableFunction;
 import org.h2.expression.ValueExpression;
+import org.h2.index.Index;
+import org.h2.index.ViewIndex;
 import org.h2.jdbc.JdbcPreparedStatement;
 import org.h2.result.SortOrder;
 import org.h2.table.Column;
@@ -254,7 +256,11 @@ public class GridSqlQueryParser {
             else if (tbl instanceof TableView) {
                 Query qry = VIEW_QUERY.get((TableView)tbl);
 
-                res = new GridSqlSubquery(parse(qry));
+                Index idx = filter.getIndex();
+
+                Query idxQry = idx instanceof ViewIndex ? ((ViewIndex)idx).getQuery() : null;
+
+                res = new GridSqlSubquery(parse(qry, idxQry));
             }
             else if (tbl instanceof FunctionTable)
                 res = parseExpression(FUNC_EXPR.get((FunctionTable)tbl), false);
@@ -281,7 +287,7 @@ public class GridSqlQueryParser {
     /**
      * @param select Select.
      */
-    public GridSqlSelect parse(Select select) {
+    public GridSqlSelect parse(Select select, @Nullable Query idxQry) {
         GridSqlSelect res = (GridSqlSelect)h2ObjToGridObj.get(select);
 
         if (res != null)
@@ -299,6 +305,9 @@ public class GridSqlQueryParser {
         GridSqlElement from = null;
 
         TableFilter filter = select.getTopTableFilter();
+
+        if (idxQry instanceof Select)
+            filter = ((Select)idxQry).getTopTableFilter();
 
         do {
             assert0(filter != null, select);
@@ -374,14 +383,18 @@ public class GridSqlQueryParser {
         throw new CacheException("Unsupported query: " + qry);
     }
 
+    public GridSqlQuery parse(Prepared qry) {
+        return parse(qry, null);
+    }
+
     /**
      * @param qry Select.
      */
-    public GridSqlQuery parse(Prepared qry) {
+    public GridSqlQuery parse(Prepared qry, @Nullable Query idxQry) {
         assert qry != null;
 
         if (qry instanceof Select)
-            return parse((Select)qry);
+            return parse((Select)qry, idxQry);
 
         if (qry instanceof SelectUnion)
             return parse((SelectUnion)qry);
