@@ -20,6 +20,8 @@ package org.apache.ignite.internal.processors.cache;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
+import javax.cache.CacheException;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
 import org.apache.ignite.cache.QueryEntity;
@@ -33,10 +35,12 @@ import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.spi.discovery.tcp.TcpDiscoverySpi;
 import org.apache.ignite.spi.discovery.tcp.ipfinder.TcpDiscoveryIpFinder;
 import org.apache.ignite.spi.discovery.tcp.ipfinder.vm.TcpDiscoveryVmIpFinder;
+import org.apache.ignite.testframework.GridTestUtils;
 import org.apache.ignite.testframework.junits.common.GridCommonAbstractTest;
 
 import static org.apache.ignite.cache.CacheAtomicWriteOrderMode.PRIMARY;
 import static org.apache.ignite.cache.CacheAtomicityMode.ATOMIC;
+import static org.apache.ignite.cache.CacheMode.REPLICATED;
 import static org.apache.ignite.cache.CacheWriteSynchronizationMode.FULL_SYNC;
 
 /**
@@ -50,7 +54,13 @@ public class IgniteCacheDistributedJoinCustomAffinityMapper extends GridCommonAb
     private static final String PERSON_CACHE = "person";
 
     /** */
+    private static final String PERSON_CACHE_CUSTOM_AFF = "personCustomAff";
+
+    /** */
     private static final String ORG_CACHE = "org";
+
+    /** */
+    private static final String ORG_CACHE_REPL_CUSTOM = "orgReplCustomAff";
 
     /** {@inheritDoc} */
     @Override protected IgniteConfiguration getConfiguration(String gridName) throws Exception {
@@ -67,8 +77,23 @@ public class IgniteCacheDistributedJoinCustomAffinityMapper extends GridCommonAb
             entity.setKeyType(Integer.class.getName());
             entity.setValueType(Person.class.getName());
             entity.addQueryField("orgId", Integer.class.getName(), null);
-            entity.addQueryField("orgName", String.class.getName(), null);
-            entity.setIndexes(F.asList(new QueryIndex("orgId"), new QueryIndex("orgName")));
+            entity.setIndexes(F.asList(new QueryIndex("orgId")));
+
+            ccfg.setQueryEntities(F.asList(entity));
+
+            ccfgs.add(ccfg);
+        }
+
+        {
+            CacheConfiguration ccfg = configuration(PERSON_CACHE_CUSTOM_AFF);
+
+            ccfg.setAffinityMapper(new TestMapper());
+
+            QueryEntity entity = new QueryEntity();
+            entity.setKeyType(Integer.class.getName());
+            entity.setValueType(Person.class.getName());
+            entity.addQueryField("orgId", Integer.class.getName(), null);
+            entity.setIndexes(F.asList(new QueryIndex("orgId")));
 
             ccfg.setQueryEntities(F.asList(entity));
 
@@ -81,8 +106,21 @@ public class IgniteCacheDistributedJoinCustomAffinityMapper extends GridCommonAb
             QueryEntity entity = new QueryEntity();
             entity.setKeyType(Integer.class.getName());
             entity.setValueType(Organization.class.getName());
-            entity.addQueryField("name", String.class.getName(), null);
-            entity.setIndexes(F.asList(new QueryIndex("name")));
+
+            ccfg.setQueryEntities(F.asList(entity));
+
+            ccfgs.add(ccfg);
+        }
+
+        {
+            CacheConfiguration ccfg = configuration(ORG_CACHE_REPL_CUSTOM);
+
+            ccfg.setCacheMode(REPLICATED);
+            ccfg.setAffinityMapper(new TestMapper());
+
+            QueryEntity entity = new QueryEntity();
+            entity.setKeyType(Integer.class.getName());
+            entity.setValueType(Organization.class.getName());
 
             ccfg.setQueryEntities(F.asList(entity));
 
@@ -132,14 +170,53 @@ public class IgniteCacheDistributedJoinCustomAffinityMapper extends GridCommonAb
 
         IgniteCache<Object, Object> cache = ignite.cache(PERSON_CACHE);
 
-        SqlFieldsQuery qry = new SqlFieldsQuery("select o.name, p._key, p.orgName " +
-            "from \"org\".Organization o, \"person\".Person p");
+        checkQueryFails(cache, "select o._key k1, p._key k2 " +
+            "from \"org\".Organization o, \"personCustomAff\".Person p where o._key=p.orgId", false);
+
+        checkQueryFails(cache, "select o._key k1, p._key k2 " +
+            "from \"personCustomAff\".Person p, \"org\".Organization o where o._key=p.orgId", false);
+
+        {
+            // Check regular query does not fail.
+            SqlFieldsQuery qry = new SqlFieldsQuery("select o._key k1, p._key k2 " +
+                "from \"org\".Organization o, \"personCustomAff\".Person p where o._key=p.orgId");
+
+            cache.query(qry).getAll();
+        }
+
+        {
+            // Should not check affinity for replicated cache.
+            SqlFieldsQuery qry = new SqlFieldsQuery("select o1._key k1, p._key k2, o2._key k3 " +
+                "from \"org\".Organization o1, \"person\".Person p, \"orgReplCustomAff\".Organization o2 where " +
+                "o1._key=p.orgId and o2._key=p.orgId");
+
+            cache.query(qry).getAll();
+        }
+    }
+
+    /**
+     * @param cache Cache.
+     * @param sql SQL.
+     * @param enforceJoinOrder Enforce join order flag.
+     */
+    private void checkQueryFails(final IgniteCache<Object, Object> cache,
+        String sql,
+        boolean enforceJoinOrder) {
+        final SqlFieldsQuery qry = new SqlFieldsQuery(sql);
 
         qry.setDistributedJoins(true);
+        qry.setEnforceJoinOrder(enforceJoinOrder);
 
-        log.info("Plan: " + queryPlan(cache, qry));
+        Throwable err = GridTestUtils.assertThrows(log, new Callable<Void>() {
+            @Override public Void call() throws Exception {
+                cache.query(qry);
 
-        cache.query(qry).getAll();
+                return null;
+            }
+        }, CacheException.class, null);
+
+        assertTrue("Unexpected error message: " + err.getMessage(),
+            err.getMessage().contains("Can not use distributed joins for cache with custom AffinityKeyMapper configured."));
     }
 
     /**
@@ -163,16 +240,11 @@ public class IgniteCacheDistributedJoinCustomAffinityMapper extends GridCommonAb
         /** */
         int orgId;
 
-        /** */
-        String orgName;
-
         /**
          * @param orgId Organization ID.
-         * @param orgName Organization name.
          */
-        public Person(int orgId, String orgName) {
+        public Person(int orgId) {
             this.orgId = orgId;
-            this.orgName = orgName;
         }
 
         /** {@inheritDoc} */
@@ -185,19 +257,6 @@ public class IgniteCacheDistributedJoinCustomAffinityMapper extends GridCommonAb
      *
      */
     private static class Organization implements Serializable {
-        /** */
-        String name;
-
-        /**
-         * @param name Name.
-         */
-        public Organization(String name) {
-            this.name = name;
-        }
-
-        /** {@inheritDoc} */
-        @Override public String toString() {
-            return S.toString(Organization.class, this);
-        }
+        // No-op.
     }
 }

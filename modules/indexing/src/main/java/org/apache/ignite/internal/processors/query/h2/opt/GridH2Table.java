@@ -113,28 +113,30 @@ public class GridH2Table extends TableBase {
         this.desc = desc;
         this.spaceName = spaceName;
 
-        boolean affinityColExists = true;
-
         if (desc != null && desc.context() != null) {
-            String affKey = desc.type().affinityKey();
+            if (!desc.context().customAffinityMapper()) {
+                boolean affinityColExists = true;
 
-            int affKeyColId = -1;
+                String affKey = desc.type().affinityKey();
 
-            if (affKey != null) {
-                String colName = desc.context().config().isSqlEscapeAll() ? affKey : affKey.toUpperCase();
+                int affKeyColId = -1;
 
-                if (doesColumnExist(colName))
-                    affKeyColId = getColumn(colName).getColumnId();
+                if (affKey != null) {
+                    String colName = desc.context().config().isSqlEscapeAll() ? affKey : affKey.toUpperCase();
+
+                    if (doesColumnExist(colName))
+                        affKeyColId = getColumn(colName).getColumnId();
+                    else
+                        affinityColExists = false;
+                }
                 else
-                    affinityColExists = false;
-            }
-            else
-                affKeyColId = KEY_COL;
+                    affKeyColId = KEY_COL;
 
-            if (affinityColExists) {
-                affKeyCol = indexColumn(affKeyColId, SortOrder.ASCENDING);
+                if (affinityColExists) {
+                    affKeyCol = indexColumn(affKeyColId, SortOrder.ASCENDING);
 
-                assert affKeyCol != null;
+                    assert affKeyCol != null;
+                }
             }
         }
 
@@ -909,7 +911,7 @@ public class GridH2Table extends TableBase {
 
         /** {@inheritDoc} */
         @Override public Cursor find(TableFilter filter, SearchRow first, SearchRow last) {
-            return delegate.find(filter, first, last);
+            return find(filter.getSession(), first, last);
         }
 
         /** {@inheritDoc} */

@@ -226,6 +226,8 @@ public class GridH2SpatialIndex extends GridH2IndexBase implements SpatialIndex 
         finally {
             l.unlock();
         }
+
+        super.destroy();
     }
 
     /** {@inheritDoc} */

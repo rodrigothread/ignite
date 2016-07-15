@@ -392,108 +392,14 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
             ignite(0).createCache(cacheConfig("orgRepl", false, Integer.class, Organization.class));
         caches.add(orgRepl);
 
+        IgniteCache<Object, Object> orgRepl2 =
+            ignite(0).createCache(cacheConfig("orgRepl2", false, Integer.class, Organization.class));
+        caches.add(orgRepl2);
+
         try {
-            // Join multiple.
-
-            {
-                String sql = "select p1._key k1, p2._key k2, o._key k3 " +
-                    "from \"persPartAff\".Person2 p1, \"persPart\".Person2 p2, \"orgPart\".Organization o " +
-                    "where p1.affKey=p2._key and p2.orgId = o._key";
-
-                checkQueryPlanContains(persPart,
-                    true,
-                    2,
-                    sql,
-                    "batched:unicast", "batched:unicast");
-
-                checkQueryPlanContains(persPart,
-                    false,
-                    2,
-                    sql,
-                    "batched:unicast", "batched:unicast");
-            }
-
-            {
-                String sql = "select p1._key k1, p2._key k2, o._key k3 " +
-                    "from \"persPartAff\".Person2 p1, \"persPart\".Person2 p2, \"orgPart\".Organization o " +
-                    "where p1.affKey > p2._key and p2.orgId = o._key";
-
-                checkQueryPlanContains(persPart,
-                    true,
-                    2,
-                    sql,
-                    "batched:broadcast", "batched:unicast");
-
-                checkQueryPlanContains(persPart,
-                    false,
-                    2,
-                    sql,
-                    "batched:broadcast", "batched:unicast");
-            }
-
-            {
-                // First join is collocated, second is replicated.
-
-                String sql = "select p1._key k1, p2._key k2, o._key k3 " +
-                    "from \"persPartAff\".Person2 p1, \"persPart\".Person2 p2, \"orgRepl\".Organization o " +
-                    "where p1.affKey=p2._key and p2.orgId = o._key";
-
-                checkQueryPlanContains(persPart,
-                    true,
-                    0,
-                    sql);
-
-                checkQueryPlanContains(persPart,
-                    false,
-                    0,
-                    sql);
-            }
-
-            {
-                String sql = "select p1._key k1, p2._key k2, o._key k3 " +
-                    "from \"persPartAff\".Person2 p1, \"persPart\".Person2 p2, \"orgRepl\".Organization o " +
-                    "where p1._key=p2._key and p2.orgId = o._key";
-
-                checkQueryPlanContains(persPart,
-                    false,
-                    1,
-                    sql,
-                    "batched:unicast");
-
-                sql = "select p1._key k1, p2._key k2, o._key k3 " +
-                    "from \"orgRepl\".Organization o, \"persPartAff\".Person2 p1, \"persPart\".Person2 p2 " +
-                    "where p1._key=p2._key and p2.orgId = o._key";
-
-                checkQueryPlanContains(persPart,
-                    false,
-                    1,
-                    sql,
-                    "batched:unicast");
-
-                sql = "select p1._key k1, p2._key k2, o._key k3 " +
-                    "from \"persPartAff\".Person2 p1, \"orgRepl\".Organization o, \"persPart\".Person2 p2 " +
-                    "where p1._key=p2._key and p2.orgId = o._key";
-
-                checkQueryPlanContains(persPart,
-                    false,
-                    1,
-                    sql,
-                    "batched:unicast");
-
-                sql = "select p1._key k1, p2._key k2, o._key k3 " +
-                    "from (select * from \"orgRepl\".Organization) o, \"persPartAff\".Person2 p1, \"persPart\".Person2 p2 " +
-                    "where p1._key=p2._key and p2.orgId = o._key";
-
-                checkQueryPlanContains(persPart,
-                    false,
-                    1,
-                    sql,
-                    "batched:unicast");
-            }
-
             // Join two partitioned.
 
-            checkQueryPlanContains(persPart,
+            checkQueryPlan(persPart,
                 true,
                 1,
                 "select p._key k1, o._key k2 " +
@@ -501,7 +407,7 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
                     "where p.orgId = o._key",
                 "batched:unicast");
 
-            checkQueryPlanContains(persPart,
+            checkQueryPlan(persPart,
                 false,
                 1,
                 "select p._key k1, o._key k2 " +
@@ -509,7 +415,7 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
                     "where p.orgId = o.affKey",
                 "batched:unicast");
 
-            checkQueryPlanContains(persPart,
+            checkQueryPlan(persPart,
                 false,
                 1,
                 "select p._key k1, o._key k2 " +
@@ -517,7 +423,7 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
                     "where p.orgId = o._key",
                 "batched:unicast");
 
-            checkQueryPlanContains(persPart,
+            checkQueryPlan(persPart,
                 false,
                 1,
                 "select p._key k1, o._key k2 " +
@@ -525,7 +431,7 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
                     "on p.orgId = o._key",
                 "batched:unicast");
 
-            checkQueryPlanContains(persPart,
+            checkQueryPlan(persPart,
                 false,
                 1,
                 "select p._key k1, o._key k2 " +
@@ -533,7 +439,7 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
                     "on p.orgId = o._key",
                 "batched:unicast");
 
-            checkQueryPlanContains(persPart,
+            checkQueryPlan(persPart,
                 true,
                 1,
                 "select p._key k1, o._key k2 " +
@@ -541,7 +447,7 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
                     "where p.orgId = o._key",
                 "batched:broadcast");
 
-            checkQueryPlanContains(persPart,
+            checkQueryPlan(persPart,
                 true,
                 1,
                 "select p._key k1, o._key k2 " +
@@ -551,63 +457,63 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
 
             // Join partitioned and replicated.
 
-            checkQueryPlanContains(persPart,
+            checkQueryPlan(persPart,
                 true,
                 0,
                 "select p._key k1, o._key k2 " +
                     "from \"persPart\".Person2 p, \"orgRepl\".Organization o " +
                     "where p.orgId = o._key");
 
-            checkQueryPlanContains(persPart,
+            checkQueryPlan(persPart,
                 false,
                 0,
                 "select p._key k1, o._key k2 " +
                     "from \"persPart\".Person2 p, \"orgRepl\".Organization o " +
                     "where p.orgId = o._key");
 
-            checkQueryPlanContains(persPart,
+            checkQueryPlan(persPart,
                 false,
                 0,
                 "select p._key k1, o._key k2 " +
                     "from \"persPart\".Person2 p, (select * from \"orgRepl\".Organization) o " +
                     "where p.orgId = o._key");
 
-            checkQueryPlanContains(persPart,
+            checkQueryPlan(persPart,
                 false,
                 0,
                 "select p._key k1, o._key k2 " +
                     "from (select * from \"orgRepl\".Organization) o, \"persPart\".Person2 p " +
                     "where p.orgId = o._key");
 
-            checkQueryPlanContains(persPart,
+            checkQueryPlan(persPart,
                 false,
                 0,
                 "select p._key k1, o._key k2 " +
                     "from \"persPart\".Person2 p inner join \"orgRepl\".Organization o " +
                     "on p.orgId = o._key");
 
-            checkQueryPlanContains(persPart,
+            checkQueryPlan(persPart,
                 false,
                 0,
                 "select p._key k1, o._key k2 " +
                     "from \"persPart\".Person2 p left outer join \"orgRepl\".Organization o " +
                     "on p.orgId = o._key");
 
-            checkQueryPlanContains(persPart,
+            checkQueryPlan(persPart,
                 false,
                 0,
                 "select p._key k1, o._key k2 " +
                     "from \"orgRepl\".Organization o, \"persPart\".Person2 p " +
                     "where p.orgId = o._key");
 
-            checkQueryPlanContains(persPart,
+            checkQueryPlan(persPart,
                 false,
                 0,
                 "select p._key k1, o._key k2 " +
                     "from \"orgRepl\".Organization o inner join \"persPart\".Person2 p " +
                     "on p.orgId = o._key");
 
-//            checkQueryPlanContains(persPart,
+//            checkQueryPlan(persPart,
 //                true,
 //                1,
 //                "select p._key k1, o._key k2 " +
@@ -622,6 +528,11 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
                 "\"orgPart\".Organization o",
                 "where p._key = o._key");
 
+//            checkNoBatchedJoin(persPart, "select p._key k1, o._key k2 ",
+//                "(select * from \"persPart\".Person2) p",
+//                "\"orgPart\".Organization o",
+//                "where p._key = o._key");
+
             checkNoBatchedJoin(persPart, "select p._key k1, o._key k2 ",
                 "\"persPart\".Person2 p",
                 "\"orgRepl\".Organization o",
@@ -636,6 +547,144 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
                 "\"persPartAff\".Person2 p",
                 "\"orgRepl\".Organization o",
                 "where p.affKey = o._key");
+
+            // Join multiple.
+
+            {
+                String sql = "select * from " +
+                    "(select o1._key k1, o2._key k2 from \"orgRepl\".Organization o1, \"orgRepl2\".Organization o2 where o1._key > o2._key) o, " +
+                    "\"persPart\".Person2 p where p.orgId = o.k1";
+
+                checkQueryPlan(persPart,
+                    false,
+                    0,
+                    sql);
+
+                checkQueryPlan(persPart,
+                    true,
+                    0,
+                    sql);
+
+                sql = "select o.k1, p1._key k2, p2._key k3 from " +
+                    "(select o1._key k1, o2._key k2 from \"orgRepl\".Organization o1, \"orgRepl2\".Organization o2 where o1._key > o2._key) o, " +
+                    "\"persPartAff\".Person2 p1, \"persPart\".Person2 p2 where p1._key=p2._key and p2.orgId = o.k1";
+
+                checkQueryPlan(persPart,
+                    false,
+                    1,
+                    sql,
+                    "persPartAff", "persPart", "batched:unicast", "orgRepl");
+
+                checkQueryFails(persPart, sql, true);
+
+                sql = "select o.k1, p._key k2 from " +
+                    "(select o1._key k1, p1._key k2 from \"orgRepl\".Organization o1, \"persPart\".Person2 p1 where o1._key = p1.orgId) o, " +
+                    "\"persPartAff\".Person2 p where p._key=o.k1";
+
+                checkQueryPlan(persPart,
+                    false,
+                    1,
+                    sql,
+                    "FROM \"persPart\"", "INNER JOIN \"orgRepl\"", "INNER JOIN \"persPartAff\"", "batched:broadcast");
+
+                checkQueryFails(persPart, sql, true);
+            }
+
+            {
+                String sql = "select p1._key k1, p2._key k2, o._key k3 " +
+                    "from \"persPartAff\".Person2 p1, \"persPart\".Person2 p2, \"orgPart\".Organization o " +
+                    "where p1.affKey=p2._key and p2.orgId = o._key";
+
+                checkQueryPlan(persPart,
+                    true,
+                    2,
+                    sql,
+                    "batched:unicast", "batched:unicast");
+
+                checkQueryPlan(persPart,
+                    false,
+                    2,
+                    sql,
+                    "batched:unicast", "batched:unicast");
+            }
+
+            {
+                String sql = "select p1._key k1, p2._key k2, o._key k3 " +
+                    "from \"persPartAff\".Person2 p1, \"persPart\".Person2 p2, \"orgPart\".Organization o " +
+                    "where p1.affKey > p2._key and p2.orgId = o._key";
+
+                checkQueryPlan(persPart,
+                    true,
+                    2,
+                    sql,
+                    "batched:broadcast", "batched:unicast");
+
+                checkQueryPlan(persPart,
+                    false,
+                    2,
+                    sql,
+                    "batched:broadcast", "batched:unicast");
+            }
+
+            {
+                // First join is collocated, second is replicated.
+
+                String sql = "select p1._key k1, p2._key k2, o._key k3 " +
+                    "from \"persPartAff\".Person2 p1, \"persPart\".Person2 p2, \"orgRepl\".Organization o " +
+                    "where p1.affKey=p2._key and p2.orgId = o._key";
+
+                checkQueryPlan(persPart,
+                    true,
+                    0,
+                    sql);
+
+                checkQueryPlan(persPart,
+                    false,
+                    0,
+                    sql);
+            }
+
+            {
+                String sql = "select p1._key k1, p2._key k2, o._key k3 " +
+                    "from \"persPartAff\".Person2 p1, \"persPart\".Person2 p2, \"orgRepl\".Organization o " +
+                    "where p1._key=p2._key and p2.orgId = o._key";
+
+                checkQueryPlan(persPart,
+                    false,
+                    1,
+                    sql,
+                    "batched:unicast");
+
+                sql = "select p1._key k1, p2._key k2, o._key k3 " +
+                    "from \"orgRepl\".Organization o, \"persPartAff\".Person2 p1, \"persPart\".Person2 p2 " +
+                    "where p1._key=p2._key and p2.orgId = o._key";
+
+                checkQueryPlan(persPart,
+                    false,
+                    1,
+                    sql,
+                    "batched:unicast");
+
+                sql = "select p1._key k1, p2._key k2, o._key k3 " +
+                    "from \"persPartAff\".Person2 p1, \"orgRepl\".Organization o, \"persPart\".Person2 p2 " +
+                    "where p1._key=p2._key and p2.orgId = o._key";
+
+                checkQueryPlan(persPart,
+                    false,
+                    1,
+                    sql,
+                    "batched:unicast");
+
+                sql = "select p1._key k1, p2._key k2, o._key k3 " +
+                    "from (select * from \"orgRepl\".Organization) o, \"persPartAff\".Person2 p1, \"persPart\".Person2 p2 " +
+                    "where p1._key=p2._key and p2.orgId = o._key";
+
+                checkQueryPlan(persPart,
+                    false,
+                    1,
+                    sql,
+                    "batched:unicast");
+            }
         }
         finally {
             for (IgniteCache<Object, Object> cache : caches)
@@ -673,12 +722,12 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
                 "from \"persPartAff\".Person2 p1, (select * from \"orgRepl\".Organization) o, \"persPart\".Person2 p2 " +
                 "where p1._key=p2._key and p2.orgId = o._key", true);
 
-            checkQueryPlanContains(persPart,
+            checkQueryPlan(persPart,
                 true,
                 0,
                 "select p._key k1, o._key k2 from \"orgRepl\".Organization o, \"persPart\".Person2 p");
 
-            checkQueryPlanContains(persPart,
+            checkQueryPlan(persPart,
                 true,
                 0,
                 "select p._key k1, o._key k2 from \"orgRepl\".Organization o, \"persPart\".Person2 p union " +
@@ -724,22 +773,22 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
         String cache1,
         String cache2,
         String where) {
-        checkQueryPlanContains(cache,
+        checkQueryPlan(cache,
             true,
             0,
             select +
                 "from " + cache1 + ","  + cache2 + " "+ where);
-        checkQueryPlanContains(cache,
+        checkQueryPlan(cache,
             false,
             0,
             select +
                 "from " + cache1 + ","  + cache2 + " "+ where);
-        checkQueryPlanContains(cache,
+        checkQueryPlan(cache,
             true,
             0,
             select +
                 "from " + cache2 + ","  + cache1 + " "+ where);
-        checkQueryPlanContains(cache,
+        checkQueryPlan(cache,
             false,
             0,
             select +
@@ -753,18 +802,18 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
      * @param sql Query.
      * @param expText Expected text to find in plan.
      */
-    private void checkQueryPlanContains(IgniteCache<Object, Object> cache,
+    private void checkQueryPlan(IgniteCache<Object, Object> cache,
         boolean enforceJoinOrder,
         int expBatchedJoins,
         String sql,
         String...expText) {
-        checkQueryPlanContains(cache,
+        checkQueryPlan(cache,
             enforceJoinOrder,
             expBatchedJoins,
             new SqlFieldsQuery(sql),
             expText);
 
-        checkQueryPlanContains(cache,
+        checkQueryPlan(cache,
             enforceJoinOrder,
             expBatchedJoins,
             new SqlFieldsQuery("select * from (" + sql + ")"),
@@ -778,7 +827,7 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
      * @param qry Query.
      * @param expText Expected text to find in plan.
      */
-    private void checkQueryPlanContains(IgniteCache<Object, Object> cache,
+    private void checkQueryPlan(IgniteCache<Object, Object> cache,
         boolean enforceJoinOrder,
         int expBatchedJoins,
         SqlFieldsQuery qry,

@@ -49,7 +49,7 @@ public final class GridH2CollocationModel {
     private static final int MULTIPLIER_BROADCAST = 200;
 
     /** */
-    private static final int MULTIPLIER_REPLICATED_NOT_LAST = 1000;
+    private static final int MULTIPLIER_REPLICATED_NOT_LAST = 10_000;
 
     /** */
     private final GridH2CollocationModel upper;
@@ -85,6 +85,7 @@ public final class GridH2CollocationModel {
      * @param upper Upper.
      * @param filter Filter.
      * @param view This model will be a subquery (or top level query) and must contain child filters.
+     * @param validate Query validation flag.
      */
     private GridH2CollocationModel(GridH2CollocationModel upper, int filter, boolean view, boolean validate) {
         this.upper = upper;
@@ -98,6 +99,7 @@ public final class GridH2CollocationModel {
      * @param filter Filter.
      * @param unions Unions.
      * @param view This model will be a subquery (or top level query) and must contain child filters.
+     * @param validate Query validation flag.
      * @return Created child collocation model.
      */
     private static GridH2CollocationModel createChildModel(GridH2CollocationModel upper,
@@ -320,7 +322,14 @@ public final class GridH2CollocationModel {
     private Affinity joinedWithCollocated(int f) {
         TableFilter tf = childFilters[f];
 
-        IndexColumn affCol = ((GridH2Table)tf.getTable()).getAffinityKeyColumn();
+        GridH2Table tbl = (GridH2Table)tf.getTable();
+
+        if (validate) {
+            if (tbl.rowDescriptor().context().customAffinityMapper())
+                throw customAffinityError(tbl.spaceName());
+        }
+
+        IndexColumn affCol = tbl.getAffinityKeyColumn();
 
         boolean affKeyCondFound = false;
 
@@ -352,7 +361,7 @@ public final class GridH2CollocationModel {
                             if (cm != null) {
                                 Type t = cm.type(true);
 
-                                if (t.isPartitioned() && t.isCollocated() && isAffinityColumn(prevJoin, expCol))
+                                if (t.isPartitioned() && t.isCollocated() && isAffinityColumn(prevJoin, expCol, validate))
                                     return Affinity.JOINED_WITH_COLLOCATED;
                             }
                         }
@@ -380,9 +389,10 @@ public final class GridH2CollocationModel {
     /**
      * @param f Table filter.
      * @param expCol Expression column.
+     * @param validate Query validation flag.
      * @return {@code true} It it is an affinity column.
      */
-    private static boolean isAffinityColumn(TableFilter f, ExpressionColumn expCol) {
+    private static boolean isAffinityColumn(TableFilter f, ExpressionColumn expCol, boolean validate) {
         Column col = expCol.getColumn();
 
         if (col == null)
@@ -393,11 +403,14 @@ public final class GridH2CollocationModel {
         if (t.isView()) {
             Query qry = getSubQuery(f);
 
-            return isAffinityColumn(qry, expCol);
+            return isAffinityColumn(qry, expCol, validate);
         }
 
         if (t instanceof GridH2Table) {
             IndexColumn affCol = ((GridH2Table)t).getAffinityKeyColumn();
+
+            if (validate && ((GridH2Table)t).rowDescriptor().context().customAffinityMapper())
+                throw customAffinityError(((GridH2Table)t).spaceName());
 
             return affCol != null && col.getColumnId() == affCol.column.getColumnId();
         }
@@ -408,13 +421,14 @@ public final class GridH2CollocationModel {
     /**
      * @param qry Query.
      * @param expCol Expression column.
+     * @param validate Query validation flag.
      * @return {@code true} It it is an affinity column.
      */
-    private static boolean isAffinityColumn(Query qry, ExpressionColumn expCol) {
+    private static boolean isAffinityColumn(Query qry, ExpressionColumn expCol, boolean validate) {
         if (qry.isUnion()) {
             SelectUnion union = (SelectUnion)qry;
 
-            return isAffinityColumn(union.getLeft(), expCol) && isAffinityColumn(union.getRight(), expCol);
+            return isAffinityColumn(union.getLeft(), expCol, validate) && isAffinityColumn(union.getRight(), expCol, validate);
         }
 
         Expression exp = qry.getExpressions().get(expCol.getColumn().getColumnId()).getNonAliasExpression();
@@ -422,7 +436,7 @@ public final class GridH2CollocationModel {
         if (exp instanceof ExpressionColumn) {
             expCol = (ExpressionColumn)exp;
 
-            return isAffinityColumn(expCol.getTableFilter(), expCol);
+            return isAffinityColumn(expCol.getTableFilter(), expCol, validate);
         }
 
         return false;
@@ -548,6 +562,7 @@ public final class GridH2CollocationModel {
      * @param info Sub-query info.
      * @param filters Filters.
      * @param filter Filter.
+     * @param validate Query validation flag.
      * @return Collocation.
      */
     public static GridH2CollocationModel buildCollocationModel(GridH2QueryContext qctx, SubQueryInfo info,
@@ -610,7 +625,7 @@ public final class GridH2CollocationModel {
         Type type = mdl.type(true);
 
         if (!type.isCollocated() && mdl.multiplier == MULTIPLIER_REPLICATED_NOT_LAST)
-            throw new CacheException("Failed to execute query: for distributed join, " +
+            throw new CacheException("Failed to execute query: for distributed join " +
                 "all REPLICATED caches must be at the end of the joined tables list.");
 
         return type.isCollocated();
@@ -621,10 +636,14 @@ public final class GridH2CollocationModel {
      * @param filter Filter.
      * @param qry Query.
      * @param unions Unions.
+     * @param validate Query validation flag.
      * @return Built model.
      */
-    private static GridH2CollocationModel buildCollocationModel(GridH2CollocationModel upper, int filter, Query qry,
-        List<GridH2CollocationModel> unions, boolean validate) {
+    private static GridH2CollocationModel buildCollocationModel(GridH2CollocationModel upper,
+        int filter,
+        Query qry,
+        List<GridH2CollocationModel> unions,
+        boolean validate) {
         if (qry.isUnion()) {
             if (unions == null)
                 unions = new ArrayList<>();
@@ -663,6 +682,15 @@ public final class GridH2CollocationModel {
         }
 
         return upper != null ? upper : cm;
+    }
+
+    /**
+     * @param cacheName Cache name.
+     * @return Error.
+     */
+    private static CacheException customAffinityError(String cacheName) {
+        return new CacheException("Can not use distributed joins for cache with custom AffinityKeyMapper configured. " +
+            "Please use AffinityKeyMapped annotation instead [cache=" + cacheName + ']');
     }
 
     /**

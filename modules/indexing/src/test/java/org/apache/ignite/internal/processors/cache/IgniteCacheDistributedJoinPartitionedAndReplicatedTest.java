@@ -90,6 +90,7 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
         ccfg.setAtomicWriteOrderMode(PRIMARY);
         ccfg.setAtomicityMode(ATOMIC);
         ccfg.setCacheMode(cacheMode);
+
         if (cacheMode == PARTITIONED)
             ccfg.setBackups(1);
 
@@ -237,15 +238,17 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
              * One organization, one person, two accounts.
              */
 
-            int orgId1 = keyForNode(aff, orgKey, node0);
+            {
+                int orgId1 = keyForNode(aff, orgKey, node0);
 
-            orgCache.put(orgId1, new Organization("obj-" + orgId1));
+                orgCache.put(orgId1, new Organization("obj-" + orgId1));
 
-            int pid = keyForNode(aff, pKey, node0);
-            personCache.put(pid, new Person(orgId1, "o1-p1"));
+                int pid1 = keyForNode(aff, pKey, node0);
+                personCache.put(pid1, new Person(orgId1, "o1-p1"));
 
-            accCache.put(keyForNode(aff, accKey, node0), new Account(pid, orgId1, "a0"));
-            accCache.put(keyForNode(aff, accKey, node1), new Account(pid, orgId1, "a1"));
+                accCache.put(keyForNode(aff, accKey, node0), new Account(pid1, orgId1, "a0"));
+                accCache.put(keyForNode(aff, accKey, node1), new Account(pid1, orgId1, "a1"));
+            }
 
             IgniteCache<Object, Object> qryCache = replicated(orgCache) ? personCache : orgCache;
 
@@ -273,31 +276,51 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
                 "from \"person\".Person p, \"acc\".Account a, \"org\".Organization o " +
                 "where p.orgId = o._key and p._key = a.personId)", qryCache, false, 2);
 
-            String[] cacheNames = {"\"org\".Organization o", "\"person\".Person p", "\"acc\".Account a"};
+            List<List<?>> res = checkQuery("select count(*) " +
+                "from \"org\".Organization o, \"person\".Person p, \"acc\".Account a " +
+                "where p.orgId = o._key and p._key = a.personId", qryCache, false, 1);
 
-            for (int c1 = 0; c1 < cacheNames.length; c1++) {
-                for (int c2 = 0; c2 < cacheNames.length; c2++) {
-                    if (c2 == c1)
-                        continue;
+            assertEquals(2L, res.get(0).get(0));
 
-                    for (int c3 = 0; c3 < cacheNames.length; c3++) {
-                        if (c3 == c1 || c3 == c2)
-                            continue;
+            checkQueries(qryCache, 2);
 
-                        String cache1 = cacheNames[c1];
-                        String cache2 = cacheNames[c2];
-                        String cache3 = cacheNames[c3];
+            {
+                int orgId2 = keyForNode(aff, orgKey, node1);
 
-                        StringBuilder qry = new StringBuilder("select o.name, p._key, p.name, a.name from ").
-                            append(cache1).append(", ").
-                            append(cache2).append(", ").
-                            append(cache3).append(" ").
-                            append("where p.orgId = o._key and p._key = a.personId");
+                orgCache.put(orgId2, new Organization("obj-" + orgId2));
 
-                        checkQuery(qry.toString(), qryCache, false, 2);
-                    }
-                }
+                int pid2 = keyForNode(aff, pKey, node0);
+                personCache.put(pid2, new Person(orgId2, "o2-p1"));
+
+                accCache.put(keyForNode(aff, accKey, node0), new Account(pid2, orgId2, "a3"));
+                accCache.put(keyForNode(aff, accKey, node1), new Account(pid2, orgId2, "a4"));
             }
+
+            checkQuery("select o.name, p._key, p.name, a.name " +
+                "from \"org\".Organization o, \"person\".Person p, \"acc\".Account a " +
+                "where p.orgId = o._key and p._key = a.personId", qryCache, false, 4);
+
+            checkQuery("select o.name, p._key, p.name, a.name " +
+                "from \"org\".Organization o inner join \"person\".Person p on p.orgId = o._key " +
+                "inner join \"acc\".Account a on p._key = a.personId", qryCache, false, 4);
+
+            res = checkQuery("select count(*) " +
+                "from \"org\".Organization o, \"person\".Person p, \"acc\".Account a " +
+                "where p.orgId = o._key and p._key = a.personId", qryCache, false, 1);
+
+            assertEquals(4L, res.get(0).get(0));
+
+            checkQuery("select o.name, p._key, p.name, a.name " +
+                "from \"org\".Organization o, \"person\".Person p, \"acc\".Account a " +
+                "where p.orgId = o._key and a.orgId = o._key", qryCache, false, 4);
+
+            res = checkQuery("select count(*) " +
+                "from \"org\".Organization o, \"person\".Person p, \"acc\".Account a " +
+                "where p.orgId = o._key and a.orgId = o._key", qryCache, false, 1);
+
+            assertEquals(4L, res.get(0).get(0));
+
+            checkQueries(qryCache, 4);
         }
         finally {
             client.destroyCache(PERSON_CACHE);
@@ -305,31 +328,67 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
             client.destroyCache(ACCOUNT_CACHE);
         }
     }
-    
+
+    /**
+     * @param qryCache Query cache.
+     * @param expSize Expected results size.
+     */
+    private void checkQueries(IgniteCache<Object, Object> qryCache, int expSize) {
+        String[] cacheNames = {"\"org\".Organization o", "\"person\".Person p", "\"acc\".Account a"};
+
+        for (int c1 = 0; c1 < cacheNames.length; c1++) {
+            for (int c2 = 0; c2 < cacheNames.length; c2++) {
+                if (c2 == c1)
+                    continue;
+
+                for (int c3 = 0; c3 < cacheNames.length; c3++) {
+                    if (c3 == c1 || c3 == c2)
+                        continue;
+
+                    String cache1 = cacheNames[c1];
+                    String cache2 = cacheNames[c2];
+                    String cache3 = cacheNames[c3];
+
+                    String qry = "select o.name, p._key, p.name, a.name from " +
+                        cache1 + ", " +
+                        cache2 + ", " +
+                        cache3 + " " +
+                        "where p.orgId = o._key and p._key = a.personId";
+
+                    checkQuery(qry, qryCache, false, expSize);
+
+                    qry = "select o.name, p._key, p.name, a.name from " +
+                        cache1 + ", " +
+                        cache2 + ", " +
+                        cache3 + " " +
+                        "where p.orgId = o._key and a.orgId = o._key";
+
+                    checkQuery(qry, qryCache, false, expSize);
+                }
+            }
+        }
+    }
+
     /**
      * @param sql SQL.
      * @param cache Cache.
      * @param enforceJoinOrder Enforce join order flag.
      * @param expSize Expected results size.
      * @param args Arguments.
+     * @return Results.
      */
-    private void checkQuery(String sql,
+    private List<List<?>> checkQuery(String sql,
         IgniteCache<Object, Object> cache,
         boolean enforceJoinOrder,
         int expSize,
         Object... args) {
-        String plan = (String)cache.query(new SqlFieldsQuery("explain " + sql)
-            .setDistributedJoins(true)
-            .setEnforceJoinOrder(enforceJoinOrder))
-            .getAll().get(0).get(0);
-
-        log.info("Plan: " + plan);
-
         SqlFieldsQuery qry = new SqlFieldsQuery(sql);
 
         qry.setDistributedJoins(true);
         qry.setEnforceJoinOrder(enforceJoinOrder);
         qry.setArgs(args);
+
+        log.info("Plan: " + queryPlan(cache, qry));
 
         QueryCursor<List<?>> cur = cache.query(qry);
 
@@ -339,6 +398,8 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
             log.info("Results: " + res);
 
         assertEquals(expSize, res.size());
+
+        return res;
     }
 
     /**
