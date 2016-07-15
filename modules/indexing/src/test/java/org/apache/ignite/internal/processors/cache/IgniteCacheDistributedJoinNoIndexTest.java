@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import javax.cache.CacheException;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
-import org.apache.ignite.IgniteException;
 import org.apache.ignite.cache.QueryEntity;
 import org.apache.ignite.cache.affinity.Affinity;
 import org.apache.ignite.cache.query.QueryCursor;
@@ -165,45 +164,81 @@ public class IgniteCacheDistributedJoinNoIndexTest extends GridCommonAbstractTes
                 personCache.put(keyForNode(aff, pKey, node1), new Person(orgId, "org-" + i));
         }
 
-        GridTestUtils.assertThrows(log, new Callable<Void>() {
+        checkNoIndexError(personCache, "select o.name, p._key, p.orgName " +
+            "from \"org\".Organization o, \"person\".Person p " +
+            "where p.orgName = o.name");
+
+        checkNoIndexError(personCache, "select o.name, p._key, p.orgName " +
+            "from \"org\".Organization o inner join \"person\".Person p " +
+            "on p.orgName = o.name");
+
+        checkNoIndexError(personCache, "select o.name, p._key, p.orgName " +
+            "from \"org\".Organization o, \"person\".Person p " +
+            "where p.orgName > o.name");
+
+        checkNoIndexError(personCache, "select o.name, p._key, p.orgName " +
+            "from (select * from \"org\".Organization) o, \"person\".Person p " +
+            "where p.orgName = o.name");
+
+        checkNoIndexError(personCache, "select o.name, p._key, p.orgName " +
+            "from \"org\".Organization o, (select * from \"person\".Person) p " +
+            "where p.orgName = o.name");
+
+        checkNoIndexError(personCache, "select o.name, p._key, p.orgName " +
+            "from (select * from \"org\".Organization) o, (select * from \"person\".Person) p " +
+            "where p.orgName = o.name");
+
+        checkNoIndexError(personCache, "select o.name, p._key, p.orgName " +
+            "from \"org\".Organization o, \"person\".Person p");
+
+        checkNoIndexError(personCache, "select o.name, p._key, p.orgName " +
+            "from \"org\".Organization o, \"person\".Person p where o._key != p._key");
+
+        checkQuery("select o.name, p._key, p.orgName " +
+            "from \"org\".Organization o, \"person\".Person p " +
+            "where p._key = o._key and o.name=?", personCache, 0, "aaa");
+    }
+
+    /**
+     * @param cache Cache.
+     * @param sql SQL.
+     */
+    private void checkNoIndexError(final IgniteCache<Object, Object> cache, final String sql) {
+        Throwable err = GridTestUtils.assertThrows(log, new Callable<Void>() {
             @Override public Void call() throws Exception {
-                SqlFieldsQuery qry = new SqlFieldsQuery("select o.name, p._key, p.orgName " +
-                    "from \"org\".Organization o, \"person\".Person p " +
-                    "where p.orgName = o.name");
+                SqlFieldsQuery qry = new SqlFieldsQuery(sql);
 
                 qry.setDistributedJoins(true);
 
-                personCache.query(qry).getAll();
+                cache.query(qry).getAll();
 
                 return null;
             }
         }, CacheException.class, null);
+
+        log.info("Error: " + err.getMessage());
+
+        assertTrue("Unexpected error message: " + err.getMessage(),
+            err.getMessage().contains("join condition does not use index"));
     }
-    
+
     /**
      * @param sql SQL.
      * @param cache Cache.
-     * @param enforceJoinOrder Enforce join order flag.
      * @param expSize Expected results size.
      * @param args Arguments.
+     * @return Results.
      */
-    private void checkQuery(String sql,
+    private List<List<?>> checkQuery(String sql,
         IgniteCache<Object, Object> cache,
-        boolean enforceJoinOrder,
         int expSize,
         Object... args) {
-        String plan = (String)cache.query(new SqlFieldsQuery("explain " + sql)
-            .setDistributedJoins(true)
-            .setEnforceJoinOrder(enforceJoinOrder))
-            .getAll().get(0).get(0);
-
-        log.info("Plan: " + plan);
-
         SqlFieldsQuery qry = new SqlFieldsQuery(sql);
 
         qry.setDistributedJoins(true);
-        qry.setEnforceJoinOrder(enforceJoinOrder);
         qry.setArgs(args);
+
+        log.info("Plan: " + queryPlan(cache, qry));
 
         QueryCursor<List<?>> cur = cache.query(qry);
 
@@ -213,6 +248,8 @@ public class IgniteCacheDistributedJoinNoIndexTest extends GridCommonAbstractTes
             log.info("Results: " + res);
 
         assertEquals(expSize, res.size());
+
+        return res;
     }
 
     /**

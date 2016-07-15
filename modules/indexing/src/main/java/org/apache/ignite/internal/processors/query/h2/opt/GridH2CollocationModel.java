@@ -21,6 +21,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import javax.cache.CacheException;
+import org.apache.ignite.internal.processors.query.h2.sql.GridSqlQueryParser;
+import org.apache.ignite.internal.util.typedef.F;
 import org.h2.command.dml.Query;
 import org.h2.command.dml.Select;
 import org.h2.command.dml.SelectUnion;
@@ -34,6 +36,7 @@ import org.h2.table.IndexColumn;
 import org.h2.table.SubQueryInfo;
 import org.h2.table.Table;
 import org.h2.table.TableFilter;
+import org.h2.table.TableView;
 
 /**
  * Collocation model for a query.
@@ -327,6 +330,12 @@ public final class GridH2CollocationModel {
         if (validate) {
             if (tbl.rowDescriptor().context().customAffinityMapper())
                 throw customAffinityError(tbl.spaceName());
+
+            if (childFilters.length > 1 && F.isEmpty(tf.getIndexConditions())) {
+                throw new CacheException("Failed to prepare distributed join query: " +
+                    "join condition does not use index [joinedCache=" + tbl.spaceName() +
+                    ", plan=" + tf.getSelect().getPlanSQL() + ']');
+            }
         }
 
         IndexColumn affCol = tbl.getAffinityKeyColumn();
@@ -401,16 +410,21 @@ public final class GridH2CollocationModel {
         Table t = col.getTable();
 
         if (t.isView()) {
-            Query qry = getSubQuery(f);
+            Query qry;
+
+            if (f.getIndex() != null)
+                qry = getSubQuery(f);
+            else
+                qry = GridSqlQueryParser.VIEW_QUERY.get((TableView)t);
 
             return isAffinityColumn(qry, expCol, validate);
         }
 
         if (t instanceof GridH2Table) {
-            IndexColumn affCol = ((GridH2Table)t).getAffinityKeyColumn();
-
             if (validate && ((GridH2Table)t).rowDescriptor().context().customAffinityMapper())
                 throw customAffinityError(((GridH2Table)t).spaceName());
+
+            IndexColumn affCol = ((GridH2Table)t).getAffinityKeyColumn();
 
             return affCol != null && col.getColumnId() == affCol.column.getColumnId();
         }
@@ -689,7 +703,8 @@ public final class GridH2CollocationModel {
      * @return Error.
      */
     private static CacheException customAffinityError(String cacheName) {
-        return new CacheException("Can not use distributed joins for cache with custom AffinityKeyMapper configured. " +
+        return new CacheException("Failed to prepare distributed join query: can not use distributed joins for cache " +
+            "with custom AffinityKeyMapper configured. " +
             "Please use AffinityKeyMapped annotation instead [cache=" + cacheName + ']');
     }
 
