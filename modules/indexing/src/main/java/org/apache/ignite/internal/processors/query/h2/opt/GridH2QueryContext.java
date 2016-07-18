@@ -73,7 +73,7 @@ public class GridH2QueryContext {
     private AffinityTopologyVersion topVer;
 
     /** */
-    private Map<UUID,int[]> partsMap;
+    private Map<UUID, int[]> partsMap;
 
     /** */
     private UUID[] partsNodes;
@@ -501,13 +501,6 @@ public class GridH2QueryContext {
         this.pageSize = pageSize;
 
         return this;
-    }
-
-    /**
-     * @return Query type.
-     */
-    public GridH2QueryType queryType() {
-        return key.type;
     }
 
     /** {@inheritDoc} */

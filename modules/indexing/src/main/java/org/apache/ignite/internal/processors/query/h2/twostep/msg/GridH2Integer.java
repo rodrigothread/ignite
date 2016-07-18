@@ -47,18 +47,6 @@ public class GridH2Integer extends GridH2ValueMessage {
         x = val.getInt();
     }
 
-    /**
-     * @param x Primitive value.
-     * @return Instance of {@link GridH2Integer}.
-     */
-    public static GridH2Integer fromInt(int x) {
-        GridH2Integer res = new GridH2Integer();
-
-        res.x = x;
-
-        return res;
-    }
-
     /** {@inheritDoc} */
     @Override public Value value(GridKernalContext ctx) {
         return ValueInt.get(x);

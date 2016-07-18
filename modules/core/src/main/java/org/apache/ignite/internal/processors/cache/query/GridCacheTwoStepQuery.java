@@ -98,7 +98,7 @@ public class GridCacheTwoStepQuery {
     /**
      * @param skipMergeTbl Skip merge table.
      */
-    public void skipMergeTbl(boolean skipMergeTbl) {
+    public void skipMergeTable(boolean skipMergeTbl) {
         this.skipMergeTbl = skipMergeTbl;
     }
 

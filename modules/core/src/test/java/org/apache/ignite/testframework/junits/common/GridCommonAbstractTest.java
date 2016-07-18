@@ -1187,12 +1187,16 @@ public abstract class GridCommonAbstractTest extends GridAbstractTest {
      * @return Key.
      */
     protected final Integer keyForNode(Affinity<Object> aff, AtomicInteger key, ClusterNode node) {
-        while (true) {
+        for (int i = 0; i < 100_000; i++) {
             Integer next = key.getAndIncrement();
 
             if (aff.mapKeyToNode(next).equals(node))
                 return next;
         }
+
+        fail("Failed to find key for node: " + node);
+
+        return null;
     }
 
     /**

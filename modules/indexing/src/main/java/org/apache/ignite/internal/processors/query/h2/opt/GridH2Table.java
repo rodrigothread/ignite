@@ -113,30 +113,28 @@ public class GridH2Table extends TableBase {
         this.desc = desc;
         this.spaceName = spaceName;
 
-        if (desc != null && desc.context() != null) {
-            if (!desc.context().customAffinityMapper()) {
-                boolean affinityColExists = true;
+        if (desc != null && desc.context() != null && !desc.context().customAffinityMapper()) {
+            boolean affinityColExists = true;
 
-                String affKey = desc.type().affinityKey();
+            String affKey = desc.type().affinityKey();
 
-                int affKeyColId = -1;
+            int affKeyColId = -1;
 
-                if (affKey != null) {
-                    String colName = desc.context().config().isSqlEscapeAll() ? affKey : affKey.toUpperCase();
+            if (affKey != null) {
+                String colName = desc.context().config().isSqlEscapeAll() ? affKey : affKey.toUpperCase();
 
-                    if (doesColumnExist(colName))
-                        affKeyColId = getColumn(colName).getColumnId();
-                    else
-                        affinityColExists = false;
-                }
+                if (doesColumnExist(colName))
+                    affKeyColId = getColumn(colName).getColumnId();
                 else
-                    affKeyColId = KEY_COL;
+                    affinityColExists = false;
+            }
+            else
+                affKeyColId = KEY_COL;
 
-                if (affinityColExists) {
-                    affKeyCol = indexColumn(affKeyColId, SortOrder.ASCENDING);
+            if (affinityColExists) {
+                affKeyCol = indexColumn(affKeyColId, SortOrder.ASCENDING);
 
-                    assert affKeyCol != null;
-                }
+                assert affKeyCol != null;
             }
         }
 
@@ -275,7 +273,7 @@ public class GridH2Table extends TableBase {
     }
 
     /**
-     * @return {@code true} If we must snapshot and release index snapshots in {@link #lock(Session, boolean, boolean)}
+     * @return {@code True} If we must snapshot and release index snapshots in {@link #lock(Session, boolean, boolean)}
      * and {@link #unlock(Session)} methods.
      */
     private boolean snapshotInLock() {

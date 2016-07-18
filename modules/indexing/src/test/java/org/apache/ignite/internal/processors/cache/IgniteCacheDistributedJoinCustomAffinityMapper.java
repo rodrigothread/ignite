@@ -216,7 +216,7 @@ public class IgniteCacheDistributedJoinCustomAffinityMapper extends GridCommonAb
         }, CacheException.class, null);
 
         assertTrue("Unexpected error message: " + err.getMessage(),
-            err.getMessage().contains("Can not use distributed joins for cache with custom AffinityKeyMapper configured."));
+            err.getMessage().contains("can not use distributed joins for cache with custom AffinityKeyMapper configured."));
     }
 
     /**

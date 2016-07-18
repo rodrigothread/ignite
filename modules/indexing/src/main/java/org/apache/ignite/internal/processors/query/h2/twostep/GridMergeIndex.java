@@ -33,6 +33,7 @@ import org.apache.ignite.IgniteException;
 import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.internal.GridKernalContext;
 import org.apache.ignite.internal.processors.query.h2.opt.GridH2Cursor;
+import org.apache.ignite.internal.util.typedef.internal.U;
 import org.h2.engine.Session;
 import org.h2.index.BaseIndex;
 import org.h2.index.Cursor;
@@ -145,7 +146,7 @@ public abstract class GridMergeIndex extends BaseIndex {
     public void setSources(Collection<ClusterNode> nodes) {
         assert remainingRows == null;
 
-        remainingRows = new HashMap<>(nodes.size(), 1f);
+        remainingRows = U.newHashMap(nodes.size());
 
         for (ClusterNode node : nodes) {
             if (remainingRows.put(node.id(), new Counter()) != null)

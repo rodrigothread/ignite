@@ -429,8 +429,16 @@ public class GridMapQueryExecutor {
     private void onQueryRequest(ClusterNode node, GridQueryRequest req) {
         List<String> caches = (List<String>)F.concat(true, req.space(), req.extraSpaces());
 
-        onQueryRequest0(node, req.requestId(), req.queries(), caches, req.topologyVersion(), null, req.partitions(),
-            null, req.pageSize(), false);
+        onQueryRequest0(node,
+            req.requestId(),
+            req.queries(),
+            caches,
+            req.topologyVersion(),
+            null,
+            req.partitions(),
+            null,
+            req.pageSize(),
+            false);
     }
 
     /**
@@ -441,8 +449,16 @@ public class GridMapQueryExecutor {
         Map<UUID,int[]> partsMap = req.partitions();
         int[] parts = partsMap == null ? null : partsMap.get(ctx.localNodeId());
 
-        onQueryRequest0(node, req.requestId(),req.queries(), req.caches(), req.topologyVersion(), partsMap, parts,
-            req.tables(), req.pageSize(), req.isFlagSet(GridH2QueryRequest.FLAG_DISTRIBUTED_JOINS));
+        onQueryRequest0(node,
+            req.requestId(),
+            req.queries(),
+            req.caches(),
+            req.topologyVersion(),
+            partsMap,
+            parts,
+            req.tables(),
+            req.pageSize(),
+            req.isFlagSet(GridH2QueryRequest.FLAG_DISTRIBUTED_JOINS));
     }
 
     /**
@@ -499,7 +515,9 @@ public class GridMapQueryExecutor {
                 throw new IllegalStateException();
 
             // Prepare query context.
-            GridH2QueryContext qctx = new GridH2QueryContext(ctx.localNodeId(), node.id(), reqId,
+            GridH2QueryContext qctx = new GridH2QueryContext(ctx.localNodeId(),
+                node.id(),
+                reqId,
                 mainCctx.isReplicated() ? REPLICATED : MAP)
                 .filter(h2.backupFilter(topVer, parts))
                 .partitionsMap(partsMap)

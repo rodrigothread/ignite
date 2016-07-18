@@ -331,7 +331,7 @@ public final class GridH2CollocationModel {
             if (tbl.rowDescriptor().context().customAffinityMapper())
                 throw customAffinityError(tbl.spaceName());
 
-            if (childFilters.length > 1 && F.isEmpty(tf.getIndexConditions())) {
+            if (F.isEmpty(tf.getIndexConditions())) {
                 throw new CacheException("Failed to prepare distributed join query: " +
                     "join condition does not use index [joinedCache=" + tbl.spaceName() +
                     ", plan=" + tf.getSelect().getPlanSQL() + ']');
@@ -350,7 +350,9 @@ public final class GridH2CollocationModel {
             for (int i = 0; i < idxConditions.size(); i++) {
                 IndexCondition c = idxConditions.get(i);
 
-                if (c.getCompareType() == Comparison.EQUAL &&
+                int cmpType = c.getCompareType();
+
+                if ((cmpType == Comparison.EQUAL || cmpType == Comparison.EQUAL_NULL_SAFE) &&
                     c.getColumn().getColumnId() == affColId && c.isEvaluatable()) {
                     affKeyCondFound = true;
 

@@ -112,18 +112,9 @@ public class IgniteCacheDistributedJoinQueryConditionsTest extends GridCommonAbs
                 cacheConfiguration(ORG_CACHE).setQueryEntities(F.asList(organizationEntity(idx)));
 
             IgniteCache<Object, Object> pCache = client.createCache(ccfg1);
-            IgniteCache<Object, Object> orgCache = client.createCache(ccfg2);
+            client.createCache(ccfg2);
 
             List<Integer> orgIds = putData1();
-
-//            checkQuery("select * from " +
-//                "(select _key, name from \"org\".Organization) o " +
-//                "inner join " +
-//                "(select orgId from Person) p " +
-//                "on p.orgId = o._key", pCache, total);
-//
-//            checkQuery("select _key, name from \"org\".Organization o " +
-//                "inner join (select orgId from Person) p on p.orgId = o._key", pCache, total);
 
             checkQuery("select o._key, o.name, p._key, p.name " +
                 "from \"org\".Organization o, Person p " +
@@ -341,10 +332,6 @@ public class IgniteCacheDistributedJoinQueryConditionsTest extends GridCommonAbs
             checkQuery("select p1._key, p1.name, p2._key, p2.name " +
                 "from Person p1, Person p2 " +
                 "where p1.name > p2.name", pCache, 3);
-
-//            checkQuery("select p1._key, p1.name, p2._key, p2.name " +
-//                "from Person p1, Person p2 " +
-//                "where p1.name != p2.name", pCache, 6);
         }
         finally {
             client.destroyCache(PERSON_CACHE);
@@ -383,8 +370,48 @@ public class IgniteCacheDistributedJoinQueryConditionsTest extends GridCommonAbs
 
             checkQuery("select o._key from \"org\".Organization o, Person p where p.orgId = o._key", pCache, 1);
 
-//            checkQuery("select o.name from \"org\".Organization o where o._key in " +
-//                "(select o._key from \"org\".Organization o, Person p where p.orgId = o._key)", pCache, 1);
+            // Distributed join is not enabled for expressions, just check query does not fail.
+            checkQuery("select o.name from \"org\".Organization o where o._key in " +
+                "(select o._key from \"org\".Organization o, Person p where p.orgId = o._key)", pCache, 0);
+        }
+        finally {
+            client.destroyCache(PERSON_CACHE);
+            client.destroyCache(ORG_CACHE);
+        }
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    public void testJoinQuery6() throws Exception {
+        Ignite client = grid(2);
+
+        try {
+            CacheConfiguration ccfg1 =
+                cacheConfiguration(PERSON_CACHE).setQueryEntities(F.asList(personEntity(true, true)));
+            CacheConfiguration ccfg2 =
+                cacheConfiguration(ORG_CACHE).setQueryEntities(F.asList(organizationEntity(true)));
+
+            IgniteCache<Object, Object> pCache = client.createCache(ccfg1);
+
+            client.createCache(ccfg2);
+
+            putData1();
+
+            checkQuery("select _key, name from \"org\".Organization o " +
+                "inner join (select orgId from Person) p on p.orgId = o._key", pCache, total);
+
+            checkQuery("select o._key, o.name from (select _key, name from \"org\".Organization) o " +
+                "inner join Person p on p.orgId = o._key", pCache, total);
+
+            checkQuery("select o._key, o.name from (select _key, name from \"org\".Organization) o " +
+                "inner join (select orgId from Person) p on p.orgId = o._key", pCache, total);
+
+            checkQuery("select * from " +
+                "(select _key, name from \"org\".Organization) o " +
+                "inner join " +
+                "(select orgId from Person) p " +
+                "on p.orgId = o._key", pCache, total);
         }
         finally {
             client.destroyCache(PERSON_CACHE);
@@ -418,18 +445,13 @@ public class IgniteCacheDistributedJoinQueryConditionsTest extends GridCommonAbs
         boolean enforceJoinOrder,
         int expSize,
         Object... args) {
-        String plan = (String)cache.query(new SqlFieldsQuery("explain " + sql)
-            .setDistributedJoins(true)
-            .setEnforceJoinOrder(enforceJoinOrder))
-            .getAll().get(0).get(0);
-
-        log.info("Plan: " + plan);
-
         SqlFieldsQuery qry = new SqlFieldsQuery(sql);
 
         qry.setDistributedJoins(true);
         qry.setEnforceJoinOrder(enforceJoinOrder);
         qry.setArgs(args);
+
+        log.info("Plan: " + queryPlan(cache, qry));
 
         QueryCursor<List<?>> cur = cache.query(qry);
 

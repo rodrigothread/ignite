@@ -383,6 +383,10 @@ public class GridSqlQueryParser {
         throw new CacheException("Unsupported query: " + qry);
     }
 
+    /**
+     * @param qry Prepared.
+     * @return Query.
+     */
     public GridSqlQuery parse(Prepared qry) {
         return parse(qry, null);
     }
@@ -463,8 +467,10 @@ public class GridSqlQueryParser {
         if (expression instanceof ExpressionColumn) {
             ExpressionColumn expCol = (ExpressionColumn)expression;
 
-            return new GridSqlColumn(expCol.getColumn(), parseTable(expCol.getTableFilter()),
-                expression.getColumnName(), expression.getSQL());
+            return new GridSqlColumn(expCol.getColumn(),
+                parseTable(expCol.getTableFilter()),
+                expression.getColumnName(),
+                expression.getSQL());
         }
 
         if (expression instanceof Alias)

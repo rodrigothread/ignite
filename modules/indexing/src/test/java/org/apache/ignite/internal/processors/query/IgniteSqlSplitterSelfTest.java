@@ -526,27 +526,32 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
             checkNoBatchedJoin(persPart, "select p._key k1, o._key k2 ",
                 "\"persPart\".Person2 p",
                 "\"orgPart\".Organization o",
-                "where p._key = o._key");
-
-//            checkNoBatchedJoin(persPart, "select p._key k1, o._key k2 ",
-//                "(select * from \"persPart\".Person2) p",
-//                "\"orgPart\".Organization o",
-//                "where p._key = o._key");
+                "where p._key = o._key", true);
 
             checkNoBatchedJoin(persPart, "select p._key k1, o._key k2 ",
                 "\"persPart\".Person2 p",
                 "\"orgRepl\".Organization o",
-                "where p._key = o._key");
+                "where p._key = o._key", true);
 
             checkNoBatchedJoin(persPartAff, "select p._key k1, o._key k2 ",
                 "\"persPartAff\".Person2 p",
                 "\"orgPart\".Organization o",
-                "where p.affKey = o._key");
+                "where p.affKey = o._key", true);
 
             checkNoBatchedJoin(persPartAff, "select p._key k1, o._key k2 ",
                 "\"persPartAff\".Person2 p",
                 "\"orgRepl\".Organization o",
-                "where p.affKey = o._key");
+                "where p.affKey = o._key", true);
+
+            checkNoBatchedJoin(persPart, "select p._key k1, o._key k2 ",
+                "(select * from \"persPart\".Person2) p",
+                "\"orgPart\".Organization o",
+                "where p._key = o._key", false);
+
+            checkNoBatchedJoin(persPart, "select p._key k1, o._key k2 ",
+                "\"persPart\".Person2 p",
+                "(select * from \"orgPart\".Organization) o",
+                "where p._key = o._key", false);
 
             // Join multiple.
 
@@ -767,32 +772,39 @@ public class IgniteSqlSplitterSelfTest extends GridCommonAbstractTest {
      * @param cache1 Cache name1.
      * @param cache2 Cache name2.
      * @param where Where clause.
+     * @param testEnforceJoinOrder If {@code true} tests query with enforced join order.
      */
     private void checkNoBatchedJoin(IgniteCache<Object, Object> cache,
         String select,
         String cache1,
         String cache2,
-        String where) {
-        checkQueryPlan(cache,
-            true,
-            0,
-            select +
-                "from " + cache1 + ","  + cache2 + " "+ where);
+        String where,
+        boolean testEnforceJoinOrder) {
         checkQueryPlan(cache,
             false,
             0,
             select +
                 "from " + cache1 + ","  + cache2 + " "+ where);
-        checkQueryPlan(cache,
-            true,
-            0,
-            select +
-                "from " + cache2 + ","  + cache1 + " "+ where);
+
         checkQueryPlan(cache,
             false,
             0,
             select +
                 "from " + cache2 + ","  + cache1 + " "+ where);
+
+        if (testEnforceJoinOrder) {
+            checkQueryPlan(cache,
+                true,
+                0,
+                select +
+                    "from " + cache1 + ","  + cache2 + " "+ where);
+
+            checkQueryPlan(cache,
+                true,
+                0,
+                select +
+                    "from " + cache2 + ","  + cache1 + " "+ where);
+        }
     }
 
     /**

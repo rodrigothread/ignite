@@ -258,27 +258,27 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
 
             checkQuery("select o.name, p._key, p.name, a.name " +
                 "from \"org\".Organization o, \"person\".Person p, \"acc\".Account a " +
-                "where p.orgId = o._key and p._key = a.personId", qryCache, false, 2);
+                "where p.orgId = o._key and p._key = a.personId and a.orgId=o._key", qryCache, false, 2);
 
             checkQuery("select o.name, p._key, p.name, a.name " +
                 "from \"org\".Organization o, \"acc\".Account a, \"person\".Person p " +
-                "where p.orgId = o._key and p._key = a.personId", qryCache, false, 2);
+                "where p.orgId = o._key and p._key = a.personId and a.orgId=o._key", qryCache, false, 2);
 
             checkQuery("select o.name, p._key, p.name, a.name " +
                 "from \"person\".Person p, \"org\".Organization o, \"acc\".Account a " +
-                "where p.orgId = o._key and p._key = a.personId", qryCache, false, 2);
+                "where p.orgId = o._key and p._key = a.personId and a.orgId=o._key", qryCache, false, 2);
 
             checkQuery("select * from (select o.name n1, p._key, p.name n2, a.name n3 " +
                 "from \"acc\".Account a, \"person\".Person p, \"org\".Organization o " +
-                "where p.orgId = o._key and p._key = a.personId)", qryCache, false, 2);
+                "where p.orgId = o._key and p._key = a.personId and a.orgId=o._key)", qryCache, false, 2);
 
             checkQuery("select * from (select o.name n1, p._key, p.name n2, a.name n3 " +
                 "from \"person\".Person p, \"acc\".Account a, \"org\".Organization o " +
-                "where p.orgId = o._key and p._key = a.personId)", qryCache, false, 2);
+                "where p.orgId = o._key and p._key = a.personId and a.orgId=o._key)", qryCache, false, 2);
 
             List<List<?>> res = checkQuery("select count(*) " +
                 "from \"org\".Organization o, \"person\".Person p, \"acc\".Account a " +
-                "where p.orgId = o._key and p._key = a.personId", qryCache, false, 1);
+                "where p.orgId = o._key and p._key = a.personId and a.orgId=o._key", qryCache, false, 1);
 
             assertEquals(2L, res.get(0).get(0));
 
@@ -298,25 +298,25 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
 
             checkQuery("select o.name, p._key, p.name, a.name " +
                 "from \"org\".Organization o, \"person\".Person p, \"acc\".Account a " +
-                "where p.orgId = o._key and p._key = a.personId", qryCache, false, 4);
+                "where p.orgId = o._key and p._key = a.personId and a.orgId=o._key", qryCache, false, 4);
 
             checkQuery("select o.name, p._key, p.name, a.name " +
                 "from \"org\".Organization o inner join \"person\".Person p on p.orgId = o._key " +
-                "inner join \"acc\".Account a on p._key = a.personId", qryCache, false, 4);
+                "inner join \"acc\".Account a on p._key = a.personId and a.orgId=o._key", qryCache, false, 4);
 
             res = checkQuery("select count(*) " +
                 "from \"org\".Organization o, \"person\".Person p, \"acc\".Account a " +
-                "where p.orgId = o._key and p._key = a.personId", qryCache, false, 1);
+                "where p.orgId = o._key and p._key = a.personId and a.orgId=o._key", qryCache, false, 1);
 
             assertEquals(4L, res.get(0).get(0));
 
             checkQuery("select o.name, p._key, p.name, a.name " +
                 "from \"org\".Organization o, \"person\".Person p, \"acc\".Account a " +
-                "where p.orgId = o._key and a.orgId = o._key", qryCache, false, 4);
+                "where p.orgId = o._key and a.orgId = o._key and a.orgId=o._key", qryCache, false, 4);
 
             res = checkQuery("select count(*) " +
                 "from \"org\".Organization o, \"person\".Person p, \"acc\".Account a " +
-                "where p.orgId = o._key and a.orgId = o._key", qryCache, false, 1);
+                "where p.orgId = o._key and a.orgId = o._key and a.orgId=o._key", qryCache, false, 1);
 
             assertEquals(4L, res.get(0).get(0));
 
@@ -353,7 +353,7 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
                         cache1 + ", " +
                         cache2 + ", " +
                         cache3 + " " +
-                        "where p.orgId = o._key and p._key = a.personId";
+                        "where p.orgId = o._key and p._key = a.personId and a.orgId=o._key";
 
                     checkQuery(qry, qryCache, false, expSize);
 
@@ -361,7 +361,7 @@ public class IgniteCacheDistributedJoinPartitionedAndReplicatedTest extends Grid
                         cache1 + ", " +
                         cache2 + ", " +
                         cache3 + " " +
-                        "where p.orgId = o._key and a.orgId = o._key";
+                        "where p.orgId = o._key and a.orgId = o._key and a.orgId=o._key";
 
                     checkQuery(qry, qryCache, false, expSize);
                 }

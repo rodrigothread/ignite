@@ -108,7 +108,7 @@ public class GridReduceQueryExecutor {
     public static final byte QUERY_POOL = GridIoPolicy.SYSTEM_POOL;
 
     /** */
-    private static final IgniteProductVersion DISTRIBUTED_JOIN_SINCE = IgniteProductVersion.fromString("1.4.0");
+    private static final IgniteProductVersion DISTRIBUTED_JOIN_SINCE = IgniteProductVersion.fromString("1.7.0");
 
     /** */
     private boolean oldNodesInTop = true;
@@ -1193,11 +1193,11 @@ public class GridReduceQueryExecutor {
      * @param m Map.
      * @return Converted map.
      */
-    private static Map<UUID,int[]> convert(Map<ClusterNode, IntArray> m) {
+    private static Map<UUID, int[]> convert(Map<ClusterNode, IntArray> m) {
         if (m == null)
             return null;
 
-        Map<UUID,int[]> res = new HashMap<>(m.size(), 1f);
+        Map<UUID, int[]> res = U.newHashMap(m.size());
 
         for (Map.Entry<ClusterNode,IntArray> entry : m.entrySet())
             res.put(entry.getKey().id(), toArray(entry.getValue()));

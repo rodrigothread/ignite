@@ -397,7 +397,7 @@ public class GridSqlQuerySplitter {
             findParams(rdcQry, params, new ArrayList<>(), paramIdxs).toArray());
 
         rdc.parameterIndexes(toArray(paramIdxs));
-        res.skipMergeTbl(rdcQry.simpleQuery());
+        res.skipMergeTable(rdcQry.simpleQuery());
 
         return rdc;
     }
