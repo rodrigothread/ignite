@@ -17,7 +17,6 @@
 
 package org.apache.ignite.hadoop.mapreduce;
 
-import java.util.LinkedHashSet;
 import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.IgniteException;
 import org.apache.ignite.IgniteFileSystem;
@@ -46,6 +45,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -116,7 +116,7 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
      */
     private Mappers assignMappers(Collection<HadoopInputSplit> splits,
         HadoopMapReducePlanTopology top) throws IgniteCheckedException {
-        Mappers bestSplitMapping = new Mappers();
+        Mappers res = new Mappers();
 
         for (HadoopInputSplit split : splits) {
             // Try getting IGFS affinity. Note that an empty collection may be returned
@@ -128,10 +128,10 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
 
             assert node != null;
 
-            bestSplitMapping.add(split, node);
+            res.add(split, node);
         }
 
-        return bestSplitMapping;
+        return res;
     }
 
     /**

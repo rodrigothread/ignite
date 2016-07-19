@@ -25,15 +25,7 @@ import java.util.ArrayList;
 import java.util.UUID;
 
 /**
- * Map-reduce plan group of nodes.
- * In fact, this class represents a physical machine in the cluster that may have zero or more Ignite nodes on board.
- * Note that the machine may not be a Hadoop data node.
- *
- * <p/>The {@code weight} field is an artificial integer value that represents a load (mostly CPU load) assigned to this
- * machine. It assumed to be non-negative.
- *
- * <p/>{@code node} field is a first added node (set in the constructor). If more nodes added, this field is nulled,
- * and only {@code nodes} collection is used further.
+ * Map-reduce plan group of nodes on a single physical machine.
  */
 public class HadoopMapReducePlanGroup {
     /** Node. */
