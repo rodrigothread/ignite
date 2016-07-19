@@ -284,33 +284,60 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
      * @param grp Group.
      * @param priority Priority.
      * @param affIds Affinity IDs.
-     * @param priorityAffId Priority affinity IDs.
+     * @param prioAffId Priority affinity IDs.
      * @return Best node ID in the group.
      */
     private static UUID bestMapperNodeForGroup(HadoopMapReducePlanGroup grp, MapperPriority priority,
-        @Nullable List<UUID> affIds, @Nullable UUID priorityAffId) {
-        if (grp.single())
-            return grp.nodeId(0);
+        @Nullable Collection<UUID> affIds, @Nullable UUID prioAffId) {
+        // Return the best node from the group.
+        int idx = 0;
 
         // This is rare situation when several nodes are started on the same host.
-        switch (priority) {
-            case NORMAL:
-                // Pick any node.
-                return grp.nodeId(ThreadLocalRandom.current().nextInt(grp.nodeCount()));
+        if (!grp.single()) {
+            switch (priority) {
+                case NORMAL: {
+                    // Pick any node.
+                    idx = ThreadLocalRandom.current().nextInt(grp.nodeCount());
 
-            case HIGH:
-                // Pick any affinity node.
-                assert !F.isEmpty(affIds);
+                    break;
+                }
+                case HIGH: {
+                    // Pick any affinity node.
+                    assert affIds != null;
 
-                return affIds.get(ThreadLocalRandom.current().nextInt(affIds.size()));
+                    List<Integer> cands = new ArrayList<>();
 
-            default:
-                // Pick primary node.
-                assert priority == MapperPriority.HIGHEST;
-                assert priorityAffId != null;
+                    for (int i = 0; i < grp.nodeCount(); i++) {
+                        UUID id = grp.nodeId(i);
 
-                return priorityAffId;
+                        if (affIds.contains(id))
+                            cands.add(i);
+                    }
+
+                    idx = cands.get(ThreadLocalRandom.current().nextInt(cands.size()));
+
+                    break;
+                }
+                default: {
+                    // Find primary node.
+                    assert prioAffId != null;
+
+                    for (int i = 0; i < grp.nodeCount(); i++) {
+                        UUID id = grp.nodeId(i);
+
+                        if (F.eq(id, prioAffId)) {
+                            idx = i;
+
+                            break;
+                        }
+                    }
+
+                    assert priority == MapperPriority.HIGHEST;
+                }
+            }
         }
+
+        return grp.nodeId(idx);
     }
 
     /**
