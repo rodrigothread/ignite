@@ -119,11 +119,10 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
         Mappers res = new Mappers();
 
         for (HadoopInputSplit split : splits) {
-            // Try getting IGFS affinity. Note that an empty collection may be returned
-            // if this is an HDFS split that does not belong to any Ignite node host.
+            // Try getting affinity node IDs.
             Collection<UUID> nodeIds = affinityNodesForSplit(split, top);
 
-            // Get best node for this split:
+            // Get best node.
             UUID node = bestMapperNode(nodeIds, top);
 
             assert node != null;
@@ -136,8 +135,8 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
 
     /**
      * Get affinity nodes for the given input split.
-     *
-     * <p/>In general, order in the returned collection *is* significant, meaning that nodes containing more data
+     * <p>
+     * Order in the returned collection *is* significant, meaning that nodes containing more data
      * go first. This way, the 1st nodes in the collection considered to be preferable for scheduling.
      *
      * @param split Split.
@@ -147,31 +146,34 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
      */
     private Collection<UUID> affinityNodesForSplit(HadoopInputSplit split, HadoopMapReducePlanTopology top)
         throws IgniteCheckedException {
-        // IGFS part:
         Collection<UUID> nodeIds = igfsAffinityNodesForSplit(split);
 
-        // HDFS part:
-        if (nodeIds == null) {
-            nodeIds = new HashSet<>();
+        if (nodeIds != null)
+            return nodeIds;
 
-            // TODO: also sort hosts there in non-ascending data order, as we do in case of IGFS affinity splits.
-            for (String host : split.hosts()) {
-                HadoopMapReducePlanGroup grp = top.groupForHost(host);
+        Map<NodeIdAndLength, UUID> res = new TreeMap<>();
 
-                if (grp != null) {
-                    for (int i = 0; i < grp.nodeCount(); i++)
-                        nodeIds.add(grp.nodeId(i));
+        for (String host : split.hosts()) {
+            long len = split instanceof HadoopFileBlock ? ((HadoopFileBlock)split).length() : 0L;
+
+            HadoopMapReducePlanGroup grp = top.groupForHost(host);
+
+            if (grp != null) {
+                for (int i = 0; i < grp.nodeCount(); i++) {
+                    UUID nodeId = grp.nodeId(i);
+
+                    res.put(new NodeIdAndLength(nodeId, len), nodeId);
                 }
             }
         }
 
-        return nodeIds;
+        return new LinkedHashSet<>(res.values());
     }
 
     /**
      * Get IGFS affinity nodes for split if possible.
-     *
-     * <p/>Order in the returned collection *is* significant, meaning that nodes containing more data
+     * <p>
+     * Order in the returned collection *is* significant, meaning that nodes containing more data
      * go first. This way, the 1st nodes in the collection considered to be preferable for scheduling.
      *
      * @param split Input split.
@@ -221,7 +223,6 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
                             }
 
                             // Sort the nodes in non-ascending order by contained data lengths.
-                            // NodeIdAndLength objects are used as keys to handle comparison when the lengths are equal.
                             Map<NodeIdAndLength, UUID> res = new TreeMap<>();
 
                             for (Map.Entry<UUID, Long> idToLenEntry : idToLen.entrySet()) {
