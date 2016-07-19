@@ -45,6 +45,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -53,24 +54,49 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Map-reduce planner which tries to assign map jobs to affinity nodes.
+ * Map-reduce planner which assigns mappers and reducers based on their "weights". Weight describes how much resources
+ * are required to execute particular map or reduce task.
+ * <p>
+ * Plan creation consists of two steps: assigning mappers and assigning reducers.
+ * <p>
+ * Mappers are assigned based on input split data location. For each input split we search for nodes where
+ * its data is stored. Planner tries to assign mappers to their affinity nodes first. This process is governed by two
+ * properties:
+ * <ul>
+ *     <li><b>{@code localMapperWeight}</b> - weight of a map task when it is executed on an affinity node;</li>
+ *     <li><b>{@code remoteMapperWeight}</b> - weight of a map task when it is executed on a non-affinity node.</li>
+ * </ul>
+ * Planning algorithm assign mappers so that total resulting weight on all nodes is minimum possible.
+ * <p>
+ * Reducers are assigned differently. First we try to distribute reducers across nodes with mappers. This approach
+ * could minimize expensive data transfer over network. Reducer assigned to a node with mapper is considered
+ * <b>{@code local}</b>. Otherwise it is considered <b>{@code remote}</b>. This process continue until certain weight
+ * threshold is reached what means that current node is already too busy and it should not have higher priority over
+ * other nodes any more. Threshold can be configured using <b>{@code preferLocalReducerThresholdWeight}</b> property.
+ * <p>
+ * When local reducer threshold is reached on all nodes, we distribute remaining reducers based on their local and
+ * remote weights in the same way as it is done for mappers. This process is governed by two
+ * properties:
+ * <ul>
+ *     <li><b>{@code localReducerWeight}</b> - weight of a reduce task when it is executed on a node with mappers;</li>
+ *     <li><b>{@code remoteReducerWeight}</b> - weight of a map task when it is executed on a node without mappers.</li>
+ * </ul>
  */
-// TODO: Docs.
 public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReducePlanner {
     /** Default local mapper weight. */
     public static final int DFLT_LOC_MAPPER_WEIGHT = 100;
 
     /** Default remote mapper weight. */
-    public static final int DFLT_RMT_MAPPER_WEIGHT = 120;
+    public static final int DFLT_RMT_MAPPER_WEIGHT = 100;
 
     /** Default local reducer weight. */
     public static final int DFLT_LOC_REDUCER_WEIGHT = 100;
 
     /** Default remote reducer weight. */
-    public static final int DFLT_RMT_REDUCER_WEIGHT = 120;
+    public static final int DFLT_RMT_REDUCER_WEIGHT = 100;
 
     /** Default reducer migration threshold weight. */
-    public static final int DFLT_REDUCER_MIGRATION_THRESHOLD_WEIGHT = 1000;
+    public static final int DFLT_PREFER_LOCAL_REDUCER_THRESHOLD_WEIGHT = 200;
 
     /** Local mapper weight. */
     private int locMapperWeight = DFLT_LOC_MAPPER_WEIGHT;
@@ -85,7 +111,7 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
     private int rmtReducerWeight = DFLT_RMT_REDUCER_WEIGHT;
 
     /** Reducer migration threshold weight. */
-    private int reducerMigrationThresholdWeight = DFLT_REDUCER_MIGRATION_THRESHOLD_WEIGHT;
+    private int preferLocReducerThresholdWeight = DFLT_PREFER_LOCAL_REDUCER_THRESHOLD_WEIGHT;
 
     /** {@inheritDoc} */
     @Override public HadoopMapReducePlan preparePlan(HadoopJob job, Collection<ClusterNode> nodes,
@@ -124,6 +150,8 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
             // Get best node.
             UUID node = bestMapperNode(nodeIds, top);
 
+            assert node != null;
+
             res.add(split, node);
         }
 
@@ -132,6 +160,9 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
 
     /**
      * Get affinity nodes for the given input split.
+     * <p>
+     * Order in the returned collection *is* significant, meaning that nodes containing more data
+     * go first. This way, the 1st nodes in the collection considered to be preferable for scheduling.
      *
      * @param split Split.
      * @param top Topology.
@@ -140,26 +171,35 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
      */
     private Collection<UUID> affinityNodesForSplit(HadoopInputSplit split, HadoopMapReducePlanTopology top)
         throws IgniteCheckedException {
-        Collection<UUID> nodeIds = igfsAffinityNodesForSplit(split);
+        Collection<UUID> igfsNodeIds = igfsAffinityNodesForSplit(split);
 
-        if (nodeIds == null) {
-            nodeIds = new HashSet<>();
+        if (igfsNodeIds != null)
+            return igfsNodeIds;
 
-            for (String host : split.hosts()) {
-                HadoopMapReducePlanGroup grp = top.groupForHost(host);
+        Map<NodeIdAndLength, UUID> res = new TreeMap<>();
 
-                if (grp != null) {
-                    for (int i = 0; i < grp.nodeCount(); i++)
-                        nodeIds.add(grp.nodeId(i));
+        for (String host : split.hosts()) {
+            long len = split instanceof HadoopFileBlock ? ((HadoopFileBlock)split).length() : 0L;
+
+            HadoopMapReducePlanGroup grp = top.groupForHost(host);
+
+            if (grp != null) {
+                for (int i = 0; i < grp.nodeCount(); i++) {
+                    UUID nodeId = grp.nodeId(i);
+
+                    res.put(new NodeIdAndLength(nodeId, len), nodeId);
                 }
             }
         }
 
-        return nodeIds;
+        return new LinkedHashSet<>(res.values());
     }
 
     /**
      * Get IGFS affinity nodes for split if possible.
+     * <p>
+     * Order in the returned collection *is* significant, meaning that nodes containing more data
+     * go first. This way, the 1st nodes in the collection considered to be preferable for scheduling.
      *
      * @param split Input split.
      * @return IGFS affinity or {@code null} if IGFS is not available.
@@ -207,6 +247,7 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
                                 }
                             }
 
+                            // Sort the nodes in non-ascending order by contained data lengths.
                             Map<NodeIdAndLength, UUID> res = new TreeMap<>();
 
                             for (Map.Entry<UUID, Long> idToLenEntry : idToLen.entrySet()) {
@@ -215,7 +256,7 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
                                 res.put(new NodeIdAndLength(id, idToLenEntry.getValue()), id);
                             }
 
-                            return new HashSet<>(res.values());
+                            return new LinkedHashSet<>(res.values());
                         }
                     }
                 }
@@ -234,7 +275,7 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
      */
     private UUID bestMapperNode(@Nullable Collection<UUID> affIds, HadoopMapReducePlanTopology top) {
         // Priority node.
-        UUID priorityAffId = F.first(affIds);
+        UUID prioAffId = F.first(affIds);
 
         // Find group with the least weight.
         HadoopMapReducePlanGroup resGrp = null;
@@ -242,14 +283,13 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
         int resWeight = Integer.MAX_VALUE;
 
         for (HadoopMapReducePlanGroup grp : top.groups()) {
-            MapperPriority priority = groupPriority(grp, affIds, priorityAffId);
+            MapperPriority prio = groupPriority(grp, affIds, prioAffId);
 
-            int weight = grp.weight() +
-                (priority == MapperPriority.NORMAL ? rmtMapperWeight : locMapperWeight);
+            int weight = grp.weight() + (prio == MapperPriority.NORMAL ? rmtMapperWeight : locMapperWeight);
 
-            if (resGrp == null || weight < resWeight || weight == resWeight && priority.value() > resPrio.value()) {
+            if (resGrp == null || weight < resWeight || weight == resWeight && prio.value() > resPrio.value()) {
                 resGrp = grp;
-                resPrio = priority;
+                resPrio = prio;
                 resWeight = weight;
             }
         }
@@ -260,7 +300,7 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
         resGrp.weight(resWeight);
 
         // Return the best node from the group.
-        return bestMapperNodeForGroup(resGrp, resPrio, affIds, priorityAffId);
+        return bestMapperNodeForGroup(resGrp, resPrio, affIds, prioAffId);
     }
 
     /**
@@ -269,11 +309,11 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
      * @param grp Group.
      * @param priority Priority.
      * @param affIds Affinity IDs.
-     * @param priorityAffId Priority affinitiy IDs.
+     * @param prioAffId Priority affinity IDs.
      * @return Best node ID in the group.
      */
     private static UUID bestMapperNodeForGroup(HadoopMapReducePlanGroup grp, MapperPriority priority,
-        @Nullable Collection<UUID> affIds, @Nullable UUID priorityAffId) {
+        @Nullable Collection<UUID> affIds, @Nullable UUID prioAffId) {
         // Return the best node from the group.
         int idx = 0;
 
@@ -305,12 +345,12 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
                 }
                 default: {
                     // Find primary node.
-                    assert priorityAffId != null;
+                    assert prioAffId != null;
 
                     for (int i = 0; i < grp.nodeCount(); i++) {
                         UUID id = grp.nodeId(i);
 
-                        if (F.eq(id, priorityAffId)) {
+                        if (F.eq(id, prioAffId)) {
                             idx = i;
 
                             break;
@@ -351,7 +391,7 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
             res.put(reducerEntry.getKey(), arr);
         }
 
-        assert reducerCnt == cnt;
+        assert reducerCnt == cnt : reducerCnt + " != " + cnt;
 
         return res;
     }
@@ -382,6 +422,8 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
             if (cnt > 0) {
                 int assigned = assignLocalReducers(split, cnt, top, mappers, res);
 
+                assert assigned <= cnt;
+
                 remaining += cnt - assigned;
             }
         }
@@ -401,7 +443,7 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
      * @param top Topology.
      * @param mappers Mappers.
      * @param resMap Reducers result map.
-     * @return Number of assigned reducers.
+     * @return Number of locally assigned reducers.
      */
     private int assignLocalReducers(HadoopInputSplit split, int cnt, HadoopMapReducePlanTopology top, Mappers mappers,
         Map<UUID, Integer> resMap) {
@@ -418,15 +460,18 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
         // Assign more reducers to the node until threshold is reached.
         int res = 0;
 
-        while (res < cnt && grp.weight() < reducerMigrationThresholdWeight) {
+        while (res < cnt && grp.weight() < preferLocReducerThresholdWeight) {
             res++;
 
             grp.weight(grp.weight() + locReducerWeight);
         }
 
         // Update result map.
-        if (res > 0)
-            resMap.put(nodeId, res);
+        if (res > 0) {
+            Integer reducerCnt = resMap.get(nodeId);
+
+            resMap.put(nodeId, reducerCnt == null ? res : reducerCnt + res);
+        }
 
         return res;
     }
@@ -447,19 +492,20 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
         set.addAll(top.groups());
 
         while (cnt-- > 0) {
+            // The least loaded machine.
             HadoopMapReducePlanGroup grp = set.first();
 
-            // Look for affinity nodes.
-            List<UUID> affIds = null;
+            // Look for nodes with assigned splits.
+            List<UUID> splitNodeIds = null;
 
             for (int i = 0; i < grp.nodeCount(); i++) {
                 UUID nodeId = grp.nodeId(i);
 
                 if (mappers.nodeToSplits.containsKey(nodeId)) {
-                    if (affIds == null)
-                        affIds = new ArrayList<>(2);
+                    if (splitNodeIds == null)
+                        splitNodeIds = new ArrayList<>(2);
 
-                    affIds.add(nodeId);
+                    splitNodeIds.add(nodeId);
                 }
             }
 
@@ -467,8 +513,8 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
             UUID id;
             int newWeight;
 
-            if (affIds != null) {
-                id = affIds.get(ThreadLocalRandom.current().nextInt(affIds.size()));
+            if (splitNodeIds != null) {
+                id = splitNodeIds.get(ThreadLocalRandom.current().nextInt(splitNodeIds.size()));
 
                 newWeight = grp.weight() + locReducerWeight;
             }
@@ -525,8 +571,7 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
         Map<HadoopInputSplit, Integer> res = new IdentityHashMap<>(splits.size());
 
         int base = reducerCnt / splits.size();
-
-        int remainder = reducerCnt - base * splits.size();
+        int remainder = reducerCnt % splits.size();
 
         for (HadoopInputSplit split : splits) {
             int val = base;
@@ -549,23 +594,26 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
      * Calculate group priority.
      *
      * @param grp Group.
-     * @param affIds Affintiy IDs.
-     * @param priorityAffId Priority affinity ID.
+     * @param affIds Affinity IDs.
+     * @param prioAffId Priority affinity ID.
      * @return Group priority.
      */
     private static MapperPriority groupPriority(HadoopMapReducePlanGroup grp, @Nullable Collection<UUID> affIds,
-        @Nullable UUID priorityAffId) {
-        MapperPriority priority = MapperPriority.NORMAL;
+        @Nullable UUID prioAffId) {
+        assert F.isEmpty(affIds) ? prioAffId == null : prioAffId == F.first(affIds);
+        assert grp != null;
+
+        MapperPriority prio = MapperPriority.NORMAL;
 
         if (!F.isEmpty(affIds)) {
             for (int i = 0; i < grp.nodeCount(); i++) {
                 UUID id = grp.nodeId(i);
 
                 if (affIds.contains(id)) {
-                    priority = MapperPriority.HIGH;
+                    prio = MapperPriority.HIGH;
 
-                    if (F.eq(priorityAffId, id)) {
-                        priority = MapperPriority.HIGHEST;
+                    if (F.eq(prioAffId, id)) {
+                        prio = MapperPriority.HIGHEST;
 
                         break;
                     }
@@ -573,15 +621,17 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
             }
         }
 
-        return priority;
+        return prio;
     }
 
     /**
-     * Get local mapper weight.
+     * Get local mapper weight. This weight is added to a node when a mapper is assigned and it's input split data is
+     * located on this node (at least partially).
+     * <p>
+     * Defaults to {@link #DFLT_LOC_MAPPER_WEIGHT}.
      *
      * @return Remote mapper weight.
      */
-    // TODO: Docs.
     public int getLocalMapperWeight() {
         return locMapperWeight;
     }
@@ -596,11 +646,13 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
     }
 
     /**
-     * Get remote mapper weight.
+     * Get remote mapper weight. This weight is added to a node when a mapper is assigned, but it's input
+     * split data is not located on this node.
+     * <p>
+     * Defaults to {@link #DFLT_RMT_MAPPER_WEIGHT}.
      *
      * @return Remote mapper weight.
      */
-    // TODO: Docs.
     public int getRemoteMapperWeight() {
         return rmtMapperWeight;
     }
@@ -615,11 +667,13 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
     }
 
     /**
-     * Get local reducer weight.
+     * Get local reducer weight. This weight is added to a node when a reducer is assigned and the node have at least
+     * one assigned mapper.
+     * <p>
+     * Defaults to {@link #DFLT_LOC_REDUCER_WEIGHT}.
      *
      * @return Local reducer weight.
      */
-    // TODO: Docs.
     public int getLocalReducerWeight() {
         return locReducerWeight;
     }
@@ -634,11 +688,13 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
     }
 
     /**
-     * Get remote reducer weight.
+     * Get remote reducer weight. This weight is added to a node when a reducer is assigned, but the node doesn't have
+     * any assigned mappers.
+     * <p>
+     * Defaults to {@link #DFLT_RMT_REDUCER_WEIGHT}.
      *
      * @return Remote reducer weight.
      */
-    // TODO: Docs.
     public int getRemoteReducerWeight() {
         return rmtReducerWeight;
     }
@@ -653,22 +709,25 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
     }
 
     /**
-     * Get reducer migration threshold weight.
+     * Get reducer migration threshold weight. When threshold is reached, a node with mappers is no longer considered
+     * as preferred for further reducer assignments.
+     * <p>
+     * Defaults to {@link #DFLT_PREFER_LOCAL_REDUCER_THRESHOLD_WEIGHT}.
      *
      * @return Reducer migration threshold weight.
      */
-    // TODO: Docs.
-    public int getReducerMigrationThresholdWeight() {
-        return reducerMigrationThresholdWeight;
+    public int getPreferLocalReducerThresholdWeight() {
+        return preferLocReducerThresholdWeight;
     }
 
     /**
-     * Set reducer migration threshold weight. See {@link #getReducerMigrationThresholdWeight()} for more information.
+     * Set reducer migration threshold weight. See {@link #getPreferLocalReducerThresholdWeight()} for more
+     * information.
      *
      * @param reducerMigrationThresholdWeight Reducer migration threshold weight.
      */
-    public void setReducerMigrationThresholdWeight(int reducerMigrationThresholdWeight) {
-        this.reducerMigrationThresholdWeight = reducerMigrationThresholdWeight;
+    public void setPreferLocalReducerThresholdWeight(int reducerMigrationThresholdWeight) {
+        this.preferLocReducerThresholdWeight = reducerMigrationThresholdWeight;
     }
 
     /** {@inheritDoc} */

@@ -36,8 +36,10 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 
@@ -72,6 +74,12 @@ public class HadoopWeightedMapReducePlannerTest extends GridCommonAbstractTest {
     /** Host 3. */
     private static final String HOST_3 = "host3";
 
+    /** Host 4. */
+    private static final String HOST_4 = "host4";
+
+    /** Host 5. */
+    private static final String HOST_5 = "host5";
+
     /** Standard node 1. */
     private static final MockNode NODE_1 = new MockNode(ID_1, MAC_1, HOST_1);
 
@@ -103,11 +111,13 @@ public class HadoopWeightedMapReducePlannerTest extends GridCommonAbstractTest {
     public void testOneIgfsSplitAffinity() throws Exception {
         IgfsMock igfs = LocationsBuilder.create().add(0, NODE_1).add(50, NODE_2).add(100, NODE_3).buildIgfs();
 
-        Collection<HadoopInputSplit> splits = new ArrayList<>();
+        List<HadoopInputSplit> splits = new ArrayList<>();
 
         splits.add(new HadoopFileBlock(new String[] { HOST_1 }, URI.create("igfs://igfs@/file"), 0, 50));
 
-        HadoopPlannerMockJob job = new HadoopPlannerMockJob(splits, 1);
+        final int expReducers = 4;
+
+        HadoopPlannerMockJob job = new HadoopPlannerMockJob(splits, expReducers);
 
         IgniteHadoopWeightedMapReducePlanner planner = createPlanner(igfs);
 
@@ -116,6 +126,161 @@ public class HadoopWeightedMapReducePlannerTest extends GridCommonAbstractTest {
         assert plan.mappers() == 1;
         assert plan.mapperNodeIds().size() == 1;
         assert plan.mapperNodeIds().contains(ID_1);
+
+        checkPlanMappers(plan, splits, NODES, false/*only 1 split*/);
+        checkPlanReducers(plan, NODES, expReducers, false/* because of threshold behavior.*/);
+    }
+
+    /**
+     * Test one HDFS splits.
+     *
+     * @throws Exception If failed.
+     */
+    public void testHdfsSplitsAffinity() throws Exception {
+        IgfsMock igfs = LocationsBuilder.create().add(0, NODE_1).add(50, NODE_2).add(100, NODE_3).buildIgfs();
+
+        final List<HadoopInputSplit> splits = new ArrayList<>();
+
+        splits.add(new HadoopFileBlock(new String[] { HOST_1 }, URI.create("hfds://" + HOST_1 + "/x"), 0, 50));
+        splits.add(new HadoopFileBlock(new String[] { HOST_2 }, URI.create("hfds://" + HOST_2 + "/x"), 50, 100));
+        splits.add(new HadoopFileBlock(new String[] { HOST_3 }, URI.create("hfds://" + HOST_3 + "/x"), 100, 37));
+
+        // The following splits belong to hosts that are out of Ignite topology at all.
+        // This means that these splits should be assigned to any least loaded modes:
+        splits.add(new HadoopFileBlock(new String[] { HOST_4 }, URI.create("hfds://" + HOST_4 + "/x"), 138, 2));
+        splits.add(new HadoopFileBlock(new String[] { HOST_5 }, URI.create("hfds://" + HOST_5 + "/x"), 140, 3));
+
+        final int expReducers = 7;
+
+        HadoopPlannerMockJob job = new HadoopPlannerMockJob(splits, expReducers);
+
+        IgniteHadoopWeightedMapReducePlanner planner = createPlanner(igfs);
+
+        final HadoopMapReducePlan plan = planner.preparePlan(job, NODES, null);
+
+        checkPlanMappers(plan, splits, NODES, true);
+
+        checkPlanReducers(plan, NODES, expReducers, true);
+    }
+
+    /**
+     * Test HDFS splits with Replication == 3.
+     *
+     * @throws Exception If failed.
+     */
+    public void testHdfsSplitsReplication() throws Exception {
+        IgfsMock igfs = LocationsBuilder.create().add(0, NODE_1).add(50, NODE_2).add(100, NODE_3).buildIgfs();
+
+        final List<HadoopInputSplit> splits = new ArrayList<>();
+
+        splits.add(new HadoopFileBlock(new String[] { HOST_1, HOST_2, HOST_3 }, URI.create("hfds://" + HOST_1 + "/x"), 0, 50));
+        splits.add(new HadoopFileBlock(new String[] { HOST_2, HOST_3, HOST_4 }, URI.create("hfds://" + HOST_2 + "/x"), 50, 100));
+        splits.add(new HadoopFileBlock(new String[] { HOST_3, HOST_4, HOST_5 }, URI.create("hfds://" + HOST_3 + "/x"), 100, 37));
+        // The following splits belong to hosts that are out of Ignite topology at all.
+        // This means that these splits should be assigned to any least loaded modes:
+        splits.add(new HadoopFileBlock(new String[] { HOST_4, HOST_5, HOST_1 }, URI.create("hfds://" + HOST_4 + "/x"), 138, 2));
+        splits.add(new HadoopFileBlock(new String[] { HOST_5, HOST_1, HOST_2 }, URI.create("hfds://" + HOST_5 + "/x"), 140, 3));
+
+        final int expReducers = 8;
+
+        HadoopPlannerMockJob job = new HadoopPlannerMockJob(splits, expReducers);
+
+        IgniteHadoopWeightedMapReducePlanner planner = createPlanner(igfs);
+
+        final HadoopMapReducePlan plan = planner.preparePlan(job, NODES, null);
+
+        checkPlanMappers(plan, splits, NODES, true);
+
+        checkPlanReducers(plan, NODES, expReducers, true);
+    }
+
+    /**
+     * Get all IDs.
+     *
+     * @param nodes Nodes.
+     * @return IDs.
+     */
+    private static Set<UUID> allIds(Collection<ClusterNode> nodes) {
+        Set<UUID> allIds = new HashSet<>();
+
+        for (ClusterNode n : nodes)
+            allIds.add(n.id());
+
+        return allIds;
+    }
+
+    /**
+     * Check mappers for the plan.
+     *
+     * @param plan Plan.
+     * @param splits Splits.
+     * @param nodes Nodes.
+     * @param expectUniformity WHether uniformity is expected.
+     */
+    private static void checkPlanMappers(HadoopMapReducePlan plan, List<HadoopInputSplit> splits,
+        Collection<ClusterNode> nodes, boolean expectUniformity) {
+        // Number of mappers should correspomd to the number of input splits:
+        assertEquals(splits.size(), plan.mappers());
+
+        if (expectUniformity) {
+            // mappers are assigned to all available nodes:
+            assertEquals(nodes.size(), plan.mapperNodeIds().size());
+
+
+            assertEquals(allIds(nodes), plan.mapperNodeIds());
+        }
+
+        // Check all splits are covered by mappers:
+        Set<HadoopInputSplit> set = new HashSet<>();
+
+        for (UUID id: plan.mapperNodeIds()) {
+            Collection<HadoopInputSplit> sp = plan.mappers(id);
+
+            assert sp != null;
+
+            for (HadoopInputSplit s: sp)
+                assertTrue(set.add(s));
+        }
+
+        // must be of the same size & contain same elements:
+        assertEquals(set, new HashSet<>(splits));
+    }
+
+    /**
+     * Check plan reducers.
+     *
+     * @param plan Plan.
+     * @param nodes Nodes.
+     * @param expReducers Expected reducers.
+     * @param expectUniformity Expected uniformity.
+     */
+    private static void checkPlanReducers(HadoopMapReducePlan plan,
+        Collection<ClusterNode> nodes, int expReducers, boolean expectUniformity) {
+
+        assertEquals(expReducers, plan.reducers());
+
+        if (expectUniformity)
+            assertEquals(allIds(nodes), plan.reducerNodeIds());
+
+        int sum = 0;
+        int lenSum = 0;
+
+        for (UUID uuid: plan.reducerNodeIds()) {
+            int[] rr = plan.reducers(uuid);
+
+            assert rr != null;
+
+            lenSum += rr.length;
+
+            for (int i: rr)
+                sum += i;
+        }
+
+        assertEquals(expReducers, lenSum);
+
+        // Numbers in the arrays must be consequtive integers stating from 0,
+        // check that simply calculating their total sum:
+        assertEquals((lenSum * (lenSum - 1) / 2), sum);
     }
 
     /**

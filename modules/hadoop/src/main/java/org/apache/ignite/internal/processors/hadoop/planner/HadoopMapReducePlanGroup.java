@@ -25,7 +25,7 @@ import java.util.ArrayList;
 import java.util.UUID;
 
 /**
- * Map-reduce plan group of nodes.
+ * Map-reduce plan group of nodes on a single physical machine.
  */
 public class HadoopMapReducePlanGroup {
     /** Node. */
@@ -47,6 +47,9 @@ public class HadoopMapReducePlanGroup {
      * @param macs MAC addresses.
      */
     public HadoopMapReducePlanGroup(ClusterNode node, String macs) {
+        assert node != null;
+        assert macs != null;
+
         this.node = node;
         this.macs = macs;
     }
