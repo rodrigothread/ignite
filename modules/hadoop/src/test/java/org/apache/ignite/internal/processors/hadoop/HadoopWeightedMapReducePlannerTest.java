@@ -17,8 +17,6 @@
 
 package org.apache.ignite.internal.processors.hadoop;
 
-import java.util.HashSet;
-import java.util.Set;
 import org.apache.ignite.cluster.ClusterMetrics;
 import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.hadoop.mapreduce.IgniteHadoopWeightedMapReducePlanner;
@@ -38,8 +36,10 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 
@@ -144,6 +144,7 @@ public class HadoopWeightedMapReducePlannerTest extends GridCommonAbstractTest {
         splits.add(new HadoopFileBlock(new String[] { HOST_1 }, URI.create("hfds://" + HOST_1 + "/x"), 0, 50));
         splits.add(new HadoopFileBlock(new String[] { HOST_2 }, URI.create("hfds://" + HOST_2 + "/x"), 50, 100));
         splits.add(new HadoopFileBlock(new String[] { HOST_3 }, URI.create("hfds://" + HOST_3 + "/x"), 100, 37));
+
         // The following splits belong to hosts that are out of Ignite topology at all.
         // This means that these splits should be assigned to any least loaded modes:
         splits.add(new HadoopFileBlock(new String[] { HOST_4 }, URI.create("hfds://" + HOST_4 + "/x"), 138, 2));
@@ -194,9 +195,10 @@ public class HadoopWeightedMapReducePlannerTest extends GridCommonAbstractTest {
     }
 
     /**
-     * TODO: Docs.
-     * @param nodes
-     * @return
+     * Get all IDs.
+     *
+     * @param nodes Nodes.
+     * @return IDs.
      */
     private static Set<UUID> allIds(Collection<ClusterNode> nodes) {
         Set<UUID> allIds = new HashSet<>();
@@ -208,7 +210,12 @@ public class HadoopWeightedMapReducePlannerTest extends GridCommonAbstractTest {
     }
 
     /**
-     * TODO: Docs.
+     * Check mappers for the plan.
+     *
+     * @param plan Plan.
+     * @param splits Splits.
+     * @param nodes Nodes.
+     * @param expectUniformity WHether uniformity is expected.
      */
     private static void checkPlanMappers(HadoopMapReducePlan plan, List<HadoopInputSplit> splits,
         Collection<ClusterNode> nodes, boolean expectUniformity) {
@@ -240,7 +247,12 @@ public class HadoopWeightedMapReducePlannerTest extends GridCommonAbstractTest {
     }
 
     /**
-     * TODO: Docs.
+     * Check plan reducers.
+     *
+     * @param plan Plan.
+     * @param nodes Nodes.
+     * @param expReducers Expected reducers.
+     * @param expectUniformity Expected uniformity.
      */
     private static void checkPlanReducers(HadoopMapReducePlan plan,
         Collection<ClusterNode> nodes, int expReducers, boolean expectUniformity) {
