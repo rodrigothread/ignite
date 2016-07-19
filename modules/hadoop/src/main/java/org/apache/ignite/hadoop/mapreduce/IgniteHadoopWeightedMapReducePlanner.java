@@ -249,9 +249,8 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
      * @return Result.
      */
     private UUID bestMapperNode(@Nullable Collection<UUID> affIds, HadoopMapReducePlanTopology top) {
-        // Priority node, may be null or empty in case if this is a Hadoop split from a data node that does
-        // not match any Ignite node.
-        final @Nullable UUID prioAffId = F.first(affIds);
+        // Priority node.
+        UUID prioAffId = F.first(affIds);
 
         // Find group with the least weight.
         HadoopMapReducePlanGroup resGrp = null;
