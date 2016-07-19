@@ -120,7 +120,7 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
 
         for (HadoopInputSplit split : splits) {
             // Try getting affinity node IDs.
-            List<UUID> nodeIds = affinityNodesForSplit(split, top);
+            Collection<UUID> nodeIds = affinityNodesForSplit(split, top);
 
             // Get best node.
             UUID node = bestMapperNode(nodeIds, top);
@@ -144,9 +144,9 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
      * @return Affintiy nodes.
      * @throws IgniteCheckedException If failed.
      */
-    private List<UUID> affinityNodesForSplit(HadoopInputSplit split, HadoopMapReducePlanTopology top)
+    private Collection<UUID> affinityNodesForSplit(HadoopInputSplit split, HadoopMapReducePlanTopology top)
         throws IgniteCheckedException {
-        List<UUID> igfsNodeIds = igfsAffinityNodesForSplit(split);
+        Collection<UUID> igfsNodeIds = igfsAffinityNodesForSplit(split);
 
         if (igfsNodeIds != null)
             return igfsNodeIds;
@@ -167,7 +167,7 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
             }
         }
 
-        return new ArrayList<>(res.values());
+        return new LinkedHashSet<>(res.values());
     }
 
     /**
@@ -180,7 +180,7 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
      * @return IGFS affinity or {@code null} if IGFS is not available.
      * @throws IgniteCheckedException If failed.
      */
-    @Nullable private List<UUID> igfsAffinityNodesForSplit(HadoopInputSplit split) throws IgniteCheckedException {
+    @Nullable private Collection<UUID> igfsAffinityNodesForSplit(HadoopInputSplit split) throws IgniteCheckedException {
         if (split instanceof HadoopFileBlock) {
             HadoopFileBlock split0 = (HadoopFileBlock)split;
 
@@ -209,7 +209,7 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
                         assert blocks != null;
 
                         if (blocks.size() == 1)
-                            return new ArrayList<>(blocks.iterator().next().nodeIds());
+                            return blocks.iterator().next().nodeIds();
                         else {
                             // The most "local" nodes go first.
                             Map<UUID, Long> idToLen = new HashMap<>();
@@ -231,7 +231,7 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
                                 res.put(new NodeIdAndLength(id, idToLenEntry.getValue()), id);
                             }
 
-                            return new ArrayList<>(res.values());
+                            return new LinkedHashSet<>(res.values());
                         }
                     }
                 }
@@ -248,7 +248,7 @@ public class IgniteHadoopWeightedMapReducePlanner extends HadoopAbstractMapReduc
      * @param top Topology.
      * @return Result.
      */
-    private UUID bestMapperNode(@Nullable List<UUID> affIds, HadoopMapReducePlanTopology top) {
+    private UUID bestMapperNode(@Nullable Collection<UUID> affIds, HadoopMapReducePlanTopology top) {
         // Priority node.
         UUID prioAffId = F.first(affIds);
 
